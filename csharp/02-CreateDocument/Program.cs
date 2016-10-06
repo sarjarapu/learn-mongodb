@@ -37,15 +37,14 @@ namespace CreateDocument
                 Console.WriteLine($"DB: {DatabaseName}, Collection: {CollectionName}\nCreate Document: {bsonDoc} ");
                 coll.InsertOne(bsonDoc);
 
-                Console.WriteLine("Creation of document is completed. Let's read it back from database");
                 Console.WriteLine("");
+                Console.WriteLine("Creation of document is completed. Let's read it back from database");
 
                 // Find all documents db.person.findOne({})
-                var cursor = coll.Find(new BsonDocument()).Limit(1);
-                foreach (var doc in cursor.ToList())
-                {
-                    Console.WriteLine("  {0}", doc);
-                }
+                var doc = coll.Find(new BsonDocument()).Limit(1).FirstOrDefault();
+                Console.WriteLine("  {0}\n", doc);
+
+                Console.WriteLine("");
                 Console.WriteLine("Congratulations! You made it through create documents in MongoDB");
             }
             catch (TimeoutException e)
