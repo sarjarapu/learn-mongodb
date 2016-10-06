@@ -37,6 +37,7 @@ namespace ConnectToMongoDB
             }
             catch (TimeoutException e)
             {
+                Console.WriteLine("Error connecting to MongoDB: {0}", connStr);
                 Console.WriteLine(e.Message);
             }
             Console.WriteLine("");
