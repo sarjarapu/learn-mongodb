@@ -1,0 +1,3 @@
+use people;
+db.names.insert({fname: "shyam"});
+
