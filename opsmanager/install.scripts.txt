@@ -1,0 +1,143 @@
+# Find and Replace below items to new servers
+# ec2-54-191-37-22.us-west-2.compute.amazonaws.com
+# mmsGroupId=587804cbe4b061e027f6d27b
+# mmsApiKey=d0561eff5cb678b3a78dd1359e68ec29
+# mongo ec2-54-202-233-130.us-west-2.compute.amazonaws.com
+
+ssh -i ~/.ssh/amazonaws_rsa   ec2-user@ec2-54-191-37-22.us-west-2.compute.amazonaws.com
+sudo yum -y upgrade 
+
+
+
+
+
+# Install Database or Ops Manager 
+# https://docs.mongodb.com/manual/tutorial/install-mongodb-enterprise-on-amazon/
+
+sudo tee /etc/yum.repos.d/mongodb-enterprise.repo <<EOF
+[mongodb-enterprise]
+name=MongoDB Enterprise Repository
+baseurl=https://repo.mongodb.com/yum/amazon/2013.03/mongodb-enterprise/3.2/\$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-3.2.asc
+EOF
+
+sudo yum install -y mongodb-enterprise
+### sudo yum install -y mongodb-enterprise-3.0.14
+### Edit the config file and enable the MMAPV1
+sudo tee /etc/mongod.conf <<EOF 
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod.log
+storage:
+  dbPath: /var/lib/mongo
+  journal:
+    enabled: true
+processManagement:
+  fork: true  # fork and run in background
+  pidFilePath: /var/run/mongodb/mongod.pid  # location of pidfile
+net:
+  port: 27017
+EOF
+
+
+sudo mkdir /var/lib/mongo /var/log/mongodb
+sudo chown -R mongod:mongod /var/lib/mongo
+sudo chown -R mongod:mongod /var/log/mongodb
+sudo service mongod  start
+
+
+
+
+
+# Install Ops Manager 
+# https://docs.opsmanager.mongodb.com/current/tutorial/install-on-prem-with-rpm-packages/
+wget https://downloads.mongodb.com/on-prem-mms/rpm/mongodb-mms-2.0.7.372-1.x86_64.rpm
+sudo rpm -ivh mongodb-mms-2.0.7.372-1.x86_64.rpm
+### sudo cat /opt/mongodb/mms/conf/conf-mms.properties
+# Use scp to copy the gen.key file from the /etc/mongodb-mms/ directory on the current server to the same directory on the other servers.
+sudo service mongodb-mms start
+
+
+# Install Automation Agents
+i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
+sudo yum -y upgrade 
+
+curl -OL http://ec2-54-191-37-22.us-west-2.compute.amazonaws.com:8080/download/agent/automation/mongodb-mms-automation-agent-manager-2.5.22.1876-1.x86_64.rpm
+# Confirm the size is same across all servers
+ls -ltr mongodb-mms-automation-agent-manager-2.5.22.1876-1.x86_64.rpm  | awk '{print $5}'
+
+sudo rpm -U mongodb-mms-automation-agent-manager-2.5.22.1876-1.x86_64.rpm
+# sudo service mongodb-mms-automation-agent stop
+# sudo rpm -e mongodb-mms-automation-agent-manager
+# sudo rm /etc/mongodb-mms/automation-agent.config.rpmsave
+# sudo cat /etc/mongodb-mms/automation-agent.config
+
+
+sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.config
+sudo sed "s/mmsGroupId=/mmsGroupId=587804cbe4b061e027f6d27b/g" /etc/mongodb-mms/automation-agent.config | \
+    sed "s/mmsApiKey=/mmsApiKey=d0561eff5cb678b3a78dd1359e68ec29/g" | \
+    sed "s/mmsBaseUrl=/mmsBaseUrl=http:\/\/ec2-54-191-37-22.us-west-2.compute.amazonaws.com:8080/g" | \
+    tee /tmp/automation-agent.config
+sudo cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
+sudo cat /etc/mongodb-mms/automation-agent.config
+
+sudo mkdir -p /data
+sudo chown mongod:mongod /data
+sudo service mongodb-mms-automation-agent start
+
+
+# Uninstall MongoDB
+sudo service mongod stop
+sudo yum -y erase $(rpm -qa | grep mongodb-enterprise)
+sudo rm -rf /var/log/mongodb
+sudo rm -rf /var/lib/mongo
+
+# Connecting to MongoS
+mongo ec2-54-202-233-130.us-west-2.compute.amazonaws.com
+
+# Run on Laptop Uploading the jar file
+# scp -i ~/.ssh/amazonaws_rsa ~/Code/work/mongodb/git-hub/poc-driver/bin/POCDriver.jar  ec2-user@ec2-54-187-204-32.us-west-2.compute.amazonaws.com:/home/ec2-user
+
+# Download jar file on servers
+# scp -i ~/.ssh/amazonaws_rsa ~/Code/work/mongodb/git-hub/poc-driver/bin/POCDriver.jar  ec2-user@ec2-54-187-204-32.us-west-2.compute.amazonaws.com:/home/ec2-user
+wget --no-check-certificate 'https://docs.google.com/uc?export=download&id=0B4KRgMp8k0BieHpHQWZkT1g5Y1k' -O POCDriver.jar
+
+
+ssh -i ~/.ssh/amazonaws_rsa ec2-user@ec2-54-187-28-219.us-west-2.compute.amazonaws.com
+java -jar POCDriver.jar -i 20 -k 20 -b 10 -u 20 -c "mongodb://ip-172-31-33-163.us-west-2.compute.internal:27017/"
+
+java -jar POCDriver.jar -i 20 -k 20 -b 10 -u 20 -c "mongodb://ip-172-31-33-164.us-west-2.compute.internal:27017/"
+
+
+# java -jar POCDriver.jar -i 20 -k 20 -b 10 -u 20 -c "mongodb://ip-172-31-9-250.us-west-2.compute.internal:27017/"
+# java -jar POCDriver.jar -i 20 -k 20 -b 10 -u 20 -c "mongodb://ip-172-31-9-251.us-west-2.compute.internal:27017/"
+# state should be: writes is not an empty list
+
+https://docs.opsmanager.mongodb.com/v2.0/tutorial/configure-monitoring-munin-node/
+
+sudo yum install -y munin-node
+sudo service munin-node start
+
+sudo mkdir -p /backup/headdb
+sudo chown -R mongodb-mms:mongodb-mms /backup/headdb
+
+# Install Backup Agent 
+# link https://docs.opsmanager.mongodb.com/v2.0/tutorial/install-backup-agent-with-rpm-package/
+
+curl -OL http://ec2-54-191-37-22.us-west-2.compute.amazonaws.com:8080/download/agent/backup/mongodb-mms-backup-agent-latest.x86_64.rpm
+sudo rpm -U mongodb-mms-backup-agent-latest.x86_64.rpm
+
+
+
+
+sudo cp /etc/mongodb-mms/backup-agent.config /tmp/backup-agent.orig.config
+sudo sed "s/mmsGroupId=/mmsGroupId=587804cbe4b061e027f6d27b/g" /etc/mongodb-mms/backup-agent.config | \
+    sed "s/mmsApiKey=/mmsApiKey=d0561eff5cb678b3a78dd1359e68ec29/g" | \
+    sed "s/mmsBaseUrl=/mmsBaseUrl=http:\/\/ec2-54-191-37-22.us-west-2.compute.amazonaws.com:8080/g" | \
+    tee /tmp/backup-agent.config
+sudo cp /tmp/backup-agent.config /etc/mongodb-mms/backup-agent.config
+sudo cat /etc/mongodb-mms/backup-agent.config
+sudo service mongodb-mms-backup-agent start
