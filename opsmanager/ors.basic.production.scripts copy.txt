@@ -17,9 +17,7 @@
 # aws-tag-name: ska-ors-demo
 # shell-user: ec2-user
 # ops-manager: ec2-54-213-251-22.us-west-2.compute.amazonaws.com
-# Twilio SID: AC5ad073b032ef6c9befa21638878e458a
-# Twilio Auth: 4e643b1cecdb98636071c381bc4d353d
-# Twilio Phone: (737) 777-8889
+
 
 ############################################################
 # Do not modiy anything below this 
@@ -49,9 +47,9 @@ instanceIds=($(echo "$result" | sed -n  's/"InstanceId": "\([^"]*\)",/\1/p' | se
 privateDNSNames=($(echo "$result" | sed -n  's/"PrivateDnsName": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p' | uniq))
 publicDNSNames=($(echo "$result" | sed -n  's/"PublicDnsName": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p' | uniq))
 
-printf '%s\n' "${instanceIds[@]}"
-printf '%s\n' "${privateDNSNames[@]}"
-printf '%s\n' "${publicDNSNames[@]}"
+# printf '%s\n' "${instanceIds[@]}"
+# printf '%s\n' "${privateDNSNames[@]}"
+# printf '%s\n' "${publicDNSNames[@]}"
 
 
 # TODO: Needs scripting here 
@@ -80,18 +78,6 @@ printf '%s\n' "${publicDNSNames[@]}"
 # ec2-54-202-226-111.us-west-2.compute.amazonaws.com
 # ec2-54-191-29-150.us-west-2.compute.amazonaws.com
 # ec2-54-214-215-75.us-west-2.compute.amazonaws.com
-
-ip-172-31-13-163.us-west-2.compute.internal
-ip-172-31-4-22.us-west-2.compute.internal
-ip-172-31-6-73.us-west-2.compute.internal
-ip-172-31-5-254.us-west-2.compute.internal
-ip-172-31-8-94.us-west-2.compute.internal
-
-ec2-54-187-167-190.us-west-2.compute.amazonaws.com
-ec2-54-202-43-111.us-west-2.compute.amazonaws.com
-ec2-54-201-128-138.us-west-2.compute.amazonaws.com
-ec2-54-201-17-170.us-west-2.compute.amazonaws.com
-ec2-54-191-18-199.us-west-2.compute.amazonaws.com
 
 
 ############################################################
@@ -140,6 +126,9 @@ gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
 EOF
 
 sudo yum install -y mongodb-enterprise
+
+# TODO: Remove the default /etc/mongod.conf & init.d scripts 
+# TODO: Create the init.d scripts for OpsMgr & Backup DBs
 
 
 sudo mkdir -p /data/appdb/db
@@ -218,20 +207,8 @@ sudo -u mongod sed  's#/etc/mongod.conf#/data/appdb/mongod.conf#g' /etc/init.d/m
 sudo mv /tmp/mongod-appdb /etc/init.d/mongod-appdb
 sudo chown mongod:mongod /etc/init.d/mongod-appdb
 sudo chmod 755 /etc/init.d/mongod-appdb
-sudo chkconfig --add mongod-appdb 
+# sudo update-rc.d mongod-appdb defaults
 sudo chkconfig mongod-appdb on
-sudo ln -s /etc/rc.d/init.d/mongod-appdb /etc/rc.d/rc3.d/mongod-appdb
-
-sudo cat /etc/rc.d/rc3.d/mongod-appdb
-
-
-sudo -u mongod sed  's#/data/appdb/mongod.conf#/data/oplogstore/mongod.conf#g' /etc/init.d/mongod-appdb > /tmp/mongod-oplogstore
-sudo mv /tmp/mongod-oplogstore /etc/init.d/mongod-oplogstore
-sudo chown mongod:mongod /etc/init.d/mongod-oplogstore
-sudo chmod 755 /etc/init.d/mongod-oplogstore
-sudo chkconfig --add mongod-oplogstore 
-sudo chkconfig mongod-oplogstore on
-
 
 # sudo curl -o /etc/init.d/mongod-appdb -L https://git.io/vXlx4
 # sudo rm /etc/init.d/mongod
@@ -293,19 +270,20 @@ sudo chkconfig mongod-oplogstore on
 # Run only on Server #3: ec2-54-191-2-174.us-west-2.compute.amazonaws.com / ip-172-31-23-245.us-west-2.compute.internal:27001
 ############################################################
 
-# ip-172-31-3-243.us-west-2.compute.internal:27001,ip-172-31-12-99.us-west-2.compute.internal:27001,ip-172-31-6-222.us-west-2.compute.internal:27001
-
 mongo --port 27001 <<EOF
-rs.initiate({_id: "rsOplogStore", "members" : [{ "_id" : 0, "host" : "ip-172-31-6-222.us-west-2.compute.internal:27001"}]})
+rs.initiate({_id: "rsOplogStore", "members" : [{ "_id" : 0, "host" : "ip-172-31-5-238.us-west-2.compute.internal:27001"}]})
 EOF
 sleep 10 
 
 mongo --port 27001 <<EOF
+use admin
 db.createUser({user: 'superuser', pwd: 'secret', roles: ['root']});
-rs.add('ip-172-31-12-99.us-west-2.compute.internal:27001')
-rs.add('ip-172-31-3-243.us-west-2.compute.internal:27001')
+rs.add('ip-172-31-4-47.us-west-2.compute.internal:27001')
+rs.add('ip-172-31-14-72.us-west-2.compute.internal:27001')
 EOF
-sleep 10 
+
+
+
 
 mongo --port 27001 <<EOF
 rs.initiate({_id: "rsOplogStore", "members" : [{ "_id" : 0, "host" : "${privateDNSNames[5]}:27001"}]})
@@ -395,9 +373,9 @@ sudo mkdir -p /backup/filesystemStore
 sudo chown mongodb-mms:mongodb-mms /backup /backup/filesystemStore
 
 # superuser:secret
-# mongodb://superuser:secret@
-# ip-172-31-3-243.us-west-2.compute.internal:27001,ip-172-31-12-99.us-west-2.compute.internal:27001,ip-172-31-6-222.us-west-2.compute.internal:27001
-# /?authSource=admin&replicaSet=rsOplogStore&maxPoolSize=150
+# ip-172-31-24-226.us-west-2.compute.internal:27001,ip-172-31-28-30.us-west-2.compute.internal:27001,ip-172-31-23-245.us-west-2.compute.internal:27001
+?authSource=admin&replicaSet=rsOplogStore
+
 
 ###############################################################
 # Install Automation Agents
@@ -412,7 +390,7 @@ sudo rpm -U mongodb-mms-automation-agent-manager-3.2.8.1942-1.x86_64.rpm
 sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.config
 sudo sed "s/mmsGroupId=/mmsGroupId=588a07c22119e9796720ace5/g" /etc/mongodb-mms/automation-agent.config | \
     sed "s/mmsApiKey=/mmsApiKey=3136703d14c1919ee176180c2b5d7157/g" | \
-    sed "s/mmsBaseUrl=/mmsBaseUrl=http:\/\/ec2-54-149-142-159.us-west-2.compute.amazonaws.com:8080/g" | \
+    sed "s/mmsBaseUrl=/mmsBaseUrl=http:\/\/ec2-54-149-142-159.us-west-2.compute.amazonaws.com::8080/g" | \
     tee /tmp/automation-agent.config
 sudo -u mongod cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config
@@ -421,52 +399,6 @@ sudo mkdir -p /data
 sudo chown mongod:mongod /data
 sudo service mongodb-mms-automation-agent start
 
-###############################################################
-# Pool: Install Automation Agents
-###############################################################
-
-i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_pool
-sudo yum -y upgrade 
-
-curl -OL http://ec2-54-149-142-159.us-west-2.compute.amazonaws.com:8080/download/agent/automation/mongodb-mms-automation-agent-manager-3.2.8.1942-1.x86_64.rpm
-sudo rpm -U mongodb-mms-automation-agent-manager-3.2.8.1942-1.x86_64.rpm
-
-sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.config
-sudo sed "s/serverPoolKey=/serverPoolKey=4e324700df392529b115cb2b992efb14/g" /etc/mongodb-mms/automation-agent.config | \
-    sed "s/mmsBaseUrl=/mmsBaseUrl=http:\/\/ec2-54-149-142-159.us-west-2.compute.amazonaws.com:8080/g" | \
-    tee /tmp/automation-agent.config
-sudo -u mongod cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
-sudo cat /etc/mongodb-mms/automation-agent.config
-
-
-# Use 3 MEDIUM NY IL OR ad 2 LARGE NY IL. Have LARGE IL agent stop 
-sudo -u mongod tee /etc/mongodb-mms/server-pool.properties <<EOF 
-Datacenter=US-EAST-NY
-Size=Medium_CPU4_RAM16GB
-EOF
-
-sudo -u mongod vi /etc/mongodb-mms/server-pool.properties 
-
-sudo mkdir -p /data
-sudo chown mongod:mongod /data
-sudo service mongodb-mms-automation-agent start
-
-# regex  ip-172-31-13-163|ip-172-31-6-73|ip-172-31-8-94
-
-# Server Pool - Feature requests
-# Pending requests .. how to know which instance is reserved and whats not for your request id 
-# also servers listing shows the servers are bound or reserved but doesn't show request.
-# I think we need little more information & ability to jump from one screen to other otherwise
-# it might become difficult to figureout what servers needs to be provisioned to fullfil request  
-
-# also we request for a pool of say 3 servers across IL, NY, OR . servers are provisioned if available 
-# which is great however, the main intension of we requesting multiple is to create replicaset or 
-# shared cluster with it. there is no easy way to create replicaset otherthan using their machine names 
-# in the regex. may be we should let the requests be tagged with pool name to quickly find the servers 
-# and use them while creating replicasets / clusters and provide an option to create replicaset soon
-# after we show the servers are provisioned for your request. May be even let them drag drop mongod, 
-# config and mongos. Also i do not recall seing a message something like your request id# xyz once 
-# those servers are created and or pending. So that user could follow up with other admins on request id 
 
 
 ###############################################################
@@ -532,17 +464,6 @@ db.createUser({user: 'mms-automation', pwd: 'secret', roles: ['clusterAdmin', 'd
 # Gotcha: 
 # use /data/db for database never do /data 
 # This operation requires that the parent directory of the data directory be writeable by the Automation Agent user, as during the conversion process the Automation Agent will create a temporary backup directory alongside the data directory. Depending on the size of the data, changing the storage engine may be a very long running operation.
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -842,51 +763,3 @@ sudo chown mongod -R  /var/log/mongodb-mms-automation
 sudo chown mongod -R  /var/lib/mongodb-mms-automation
 
 nohup sudo -u mongod ./mongodb-mms-automation-agent --config=local.config >> /var/log/mongodb-mms-automation/automation-agent.log 2>&1 &
-
-
-
-Question#: 
-Q: I got only daemon running .. not sure where does it see the other 2 from 
-Notes: 1 Backup Daemon(s) configured for use. A total of 3 Backup Daemon(s) exist. 
-
-Q: Take snapshots for every 24 hours  & save for 5 days. Client is looking for 24 hrs + 7 days but "Daily snapshot" gets enabled only if other than 24 hrs 
-
-Q: Once onboarded to Ops Mgr & Automation. What all operations they can or cannot do directly on a mongodb server ? 
-
-
-========================
-Status Update 
-========================
-. Done: Install Ops Manager AppDB as PSS replicaset 
-. Done: Install Ops Manager Oplog as PSS replicaset
-. Done: Install Ops Manager HTTP Service 
-. Done: Registering Admin User & Basic configurations on Ops Manager HTTP Service 
-. Done: Waiting for team to come back from their meeting 
-. Done: Install Automation Agent on existing QA replicaset
-. Done: Import on existing QA MongoDB v2.6 replicaset 
-. Done: Create headdb & blockstore map directories on server running Backup Daemon + chown mongdb-mms 
-. Done: Configure Backup for QA replicaSet 
-. Done: Wait for init sync to complete 
-. Done: Populate some dummy data in collection 
-. Done: Restore the snapshot to QA replicaSet and confirm no dummy data exists 
-. Done: for tomorrow if time permits 
-. Done: Upgrade 2.6 MongoDB to MongoDB 3.0.* MMAP
-. Skipped: Run their build server with automated tests. Skipped because of 5 hr run time 
-. Done: Upgrade 3.0 MongoDB MMAP to MongoDB 3.2 MMAP 
-. Done: Upgrade 3.2 MongoDB MMAP to MongoDB 3.2 WT 
-
-
-
-cp /etc/security/limits.conf /etc/security/limits.d/99-mongodb-nproc.conf
-
-
-wget -O /etc/init.d/disable-transparent-hugepages http://git.io/vlHzS
-sudo chmod 755 /etc/init.d/disable-transparent-hugepages
-chkconfig disable-transparent-hugepages on
-
-
-
-Questions asked
-
-can I have a user just for the specific secondary 
-how 
