@@ -1,0 +1,18 @@
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] MongoDB starting : pid=89486 port=22010 dbpath=/Users/shyamarjarapu/Code/work/mongodb/git-hub/sarjarapu/learn-mongodb/shell/run-mongo/11.replicaset.auth.x509/config/./data 64-bit host=Shyams-MacBook-Pro.local
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] db version v3.4.0
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] git version: f4240c60f005be757399042dc12f6addbc3170c1
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] OpenSSL version: OpenSSL 1.0.2j  26 Sep 2016
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] allocator: system
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] modules: none
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] build environment:
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten]     distarch: x86_64
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten]     target_arch: x86_64
+2017-01-17T00:36:05.055-0800 I CONTROL  [initandlisten] options: { net: { port: 22010, ssl: { CAFile: "certauthority.pem", PEMKeyFile: "server.pem", PEMKeyPassword: "<password>", mode: "requireSSL" } }, processManagement: { fork: true }, storage: { dbPath: "./data" }, systemLog: { destination: "file", path: "./mongod.log" } }
+2017-01-17T00:36:05.056-0800 E NETWORK  [initandlisten] listen(): bind() failed Address already in use for socket: 0.0.0.0:22010
+2017-01-17T00:36:05.056-0800 E NETWORK  [initandlisten]   addr already in use
+2017-01-17T00:36:05.056-0800 E NETWORK  [initandlisten] Failed to set up sockets during startup.
+2017-01-17T00:36:05.056-0800 E STORAGE  [initandlisten] Failed to set up listener: InternalError: Failed to set up sockets
+2017-01-17T00:36:05.056-0800 I NETWORK  [initandlisten] shutdown: going to close listening sockets...
+2017-01-17T00:36:05.056-0800 I NETWORK  [initandlisten] shutdown: going to flush diaglog...
+2017-01-17T00:36:05.056-0800 I CONTROL  [initandlisten] now exiting
+2017-01-17T00:36:05.056-0800 I CONTROL  [initandlisten] shutting down with code:48

@@ -1,0 +1,25 @@
+rm -rf data 
+mkdir -p data/{s1,s2,s3}/db
+echo secretsaltOplogStore | openssl sha1 -sha512 | sed 's/(stdin)= //g' > ./keyfile
+chmod 400 keyfile
+
+
+mongod --port 27001 --dbpath data/s1/db --logpath data/s1/mongod.log --fork --keyFile keyfile --replSet rsAppDB
+sleep 2
+
+mongod --port 27001 --quiet <<EOF
+use admin
+rs.initiate({_id: "rsAppDB", members : [{_id: 0, host: "Shyams-MacBook-Pro.local:27001", priority: 5}, {_id: 1, host: "Shyams-MacBook-Pro.local:27002"}, {_id: 2, host: "Shyams-MacBook-Pro.local:27003"}]})
+sleep(15*1000)
+EOF
+
+
+db.shutdownServer({force: true})
+
+mongod --port 27002 --dbpath data/s2/db --logpath data/s2/mongod.log --fork --keyFile keyfile --replSet rsAppDB 
+mongod --port 27003 --dbpath data/s3/db --logpath data/s3/mongod.log --fork --keyFile keyfile --replSet rsAppDB
+
+mongod --quiet --port 27003 <<EOF
+use admin
+db.shutdownServer({force: true})
+EOF
