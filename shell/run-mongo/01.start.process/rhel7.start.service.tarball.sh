@@ -1,3 +1,4 @@
+#!/bin/sh
 
 # download the tar file, extract and copy 
 curl -O https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.4.1.tgz
