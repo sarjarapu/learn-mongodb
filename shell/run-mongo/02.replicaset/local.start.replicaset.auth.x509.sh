@@ -17,8 +17,8 @@ createConfigAndStartMongoD()
 {     
       serverPath=$1
       serverPort=$2
-
-echo 'secretPasscode' | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $serverPath/config/keyfile
+      serverName=$3
+echo 'secretPasscode' | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $serverPath/keyfile
 
 echo "
 systemLog:
@@ -32,22 +32,27 @@ processManagement:
    pidFilePath: $serverPath/mongod.pid
 net:
    port: $serverPort
+   ssl:
+      mode: requireSSL
+      PEMKeyFile: $serverPath/$serverName.pem
+      PEMKeyPassword: secretPassworFor$serverName
+      CAFile: $serverPath/cert.authority.pem
+      clusterAuthMode: 
 replication:
    replSetName: rs0
 security:
    authorization: enabled
-   keyFile: $serverPath/config/keyfile
-" | tee $serverPath/config/mongod.conf 
+" | tee $serverPath/mongod.conf 
 
-chmod 400 $serverPath/config/keyfile
+chmod 400 $serverPath/keyfile
 sleep 1
-mongod --config $serverPath/config/mongod.conf 
+mongod --config $serverPath/mongod.conf 
 
 }
 
-createConfigAndStartMongoD `pwd`/server1 28000
-createConfigAndStartMongoD `pwd`/server2 28001
-createConfigAndStartMongoD `pwd`/server3 28002
+createConfigAndStartMongoD `pwd`/server1 28000 ShyamsMacBookPro_28000
+createConfigAndStartMongoD `pwd`/server2 28001 ShyamsMacBookPro_28000
+createConfigAndStartMongoD `pwd`/server3 28002 ShyamsMacBookPro_28000
 
 
 sleep 2

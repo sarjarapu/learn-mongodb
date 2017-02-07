@@ -33,7 +33,7 @@ createSubordinateCA()
 # worked from docs 
 # https://docs.mongodb.com/manual/tutorial/configure-ssl/
 openssl req -newkey rsa:2048 -new -x509 -days 365 -nodes -out mongodb-cert.crt -keyout mongodb-cert.key -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
-cat mongodb-cert.key mongodb-cert.crt > mongodb.pem
+cat mongodb-cert.key mongodb-cert.crt > mongodb-cert.pem
 mongod  --sslMode requireSSL --sslPEMKeyFile mongodb.pem --dbpath ./data --logpath ./mongod.log --fork --port 22010 --sslAllowConnectionsWithoutCertificates
 mongo --ssl --sslCAFile mongodb.pem --host certauthority.arjarapu.net --port 22010
 
