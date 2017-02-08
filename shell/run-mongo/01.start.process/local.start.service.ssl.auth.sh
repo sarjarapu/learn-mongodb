@@ -91,8 +91,8 @@ net:
       PEMKeyPassword: $serverPassword
       CAFile: $caCertsPath/rootca.public.crt
 security:
-#   clusterAuthMode: x509
-   authorization: enabled   
+   clusterAuthMode: x509
+#   authorization: enabled   
 " | tee $serverPath/conf/mongod.conf 
 
 mongod --config $serverPath/conf/mongod.conf 
