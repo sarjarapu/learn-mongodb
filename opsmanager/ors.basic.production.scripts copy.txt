@@ -1,3 +1,5 @@
+# setProfilerLevel typo
+
 ############################################################
 # Install a Basic Production Deployment on RHEL or Amazon Linux
 # https://docs.opsmanager.mongodb.com/v3.4/tutorial/install-basic-deployment/
@@ -6,8 +8,8 @@
 
 # Setup: 
 # Servers:  server-1    server-2    server-3
-#   OpsDB:  primary     arbiter     secondary
-#   BkpDB:  arbiter     primary     secondary
+#   OpsDB:  primary     secondary   secondary
+#   BkpDB:  secondary   primary     secondary
 #  OpsWeb:  http        http
 #  Daemon:              BackupD
 
@@ -94,18 +96,24 @@ clusters:
       - ${publicDNSNames[0]}
       - ${publicDNSNames[1]}
       - ${publicDNSNames[2]}
-  aws_ors_bkdb:
+  aws_ors_mongo:
     login: ec2-user
     hosts:
       - ${publicDNSNames[3]}
       - ${publicDNSNames[4]}
       - ${publicDNSNames[5]}
-  aws_ors_mongo:
-    login: ec2-user
-    hosts:
       - ${publicDNSNames[6]}
       - ${publicDNSNames[7]}
       - ${publicDNSNames[8]}
+  aws_ors_pool:
+    login: ec2-user
+    hosts:
+      - ${publicDNSNames[9]}
+      - ${publicDNSNames[10]}
+      - ${publicDNSNames[11]}
+      - ${publicDNSNames[12]}
+      - ${publicDNSNames[13]}
+      - ${publicDNSNames[14]}
 EOF
 
 
@@ -173,8 +181,8 @@ sleep 10
 mongo --port 27000 <<EOF
 use admin
 db.createUser({user: 'superuser', pwd: 'secret', roles: ['root']})
-rs.add('ip-172-31-12-99.us-west-2.compute.internal:27000')
-rs.add('ip-172-31-6-222.us-west-2.compute.internal:27000')
+rs.add('ip-172-31-34-88.us-west-2.compute.internal:27000')
+rs.add('ip-172-31-37-28.us-west-2.compute.internal:27000')
 EOF
 
 mongo --port 27000 <<EOF
@@ -278,8 +286,8 @@ sleep 10
 mongo --port 27001 <<EOF
 use admin
 db.createUser({user: 'superuser', pwd: 'secret', roles: ['root']});
-rs.add('ip-172-31-4-47.us-west-2.compute.internal:27001')
-rs.add('ip-172-31-14-72.us-west-2.compute.internal:27001')
+rs.add('ip-172-31-34-88.us-west-2.compute.internal:27001')
+rs.add('ip-172-31-37-28.us-west-2.compute.internal:27001')
 EOF
 
 
@@ -322,7 +330,12 @@ sudo vi /opt/mongodb/mms/conf/conf-mms.properties
 
 # Goto this line and replace connection string 
 # mongo.mongoUri=mongodb://127.0.0.1:27017/?maxPoolSize=150
-# mongodb://superuser:secret@ip-172-31-3-243.us-west-2.compute.internal:27000,ip-172-31-12-99.us-west-2.compute.internal:27000,ip-172-31-6-222.us-west-2.compute.internal:27000/?authSource=admin&replicaSet=rsAppDB&maxPoolSize=150
+
+
+ip-172-31-47-191.us-west-2.compute.internal:27000,ip-172-31-34-88.us-west-2.compute.internal:27000,ip-172-31-37-28.us-west-2.compute.internal:27000
+
+
+# mongodb://superuser:secret@ip-172-31-47-191.us-west-2.compute.internal:27000,ip-172-31-34-88.us-west-2.compute.internal:27000,ip-172-31-37-28.us-west-2.compute.internal:27000/?authSource=admin&replicaSet=rsAppDB&maxPoolSize=150
 # mongo.replicaSet=rsAppDB
 
 ############################################################
