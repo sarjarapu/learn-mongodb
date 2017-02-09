@@ -13,6 +13,8 @@ awsSSHUser="ec2-user"
 awsPrivateKeyName="amazonaws_rsa"
 awsPrivateKeyPath="~/.ssh/$awsPrivateKeyName"
 scriptsFolder="./scripts"
+#osFlavor=amazon
+osFlavor='rhel'
 
 ############################################################
 # Do not modiy anything below this 
@@ -51,7 +53,7 @@ publicDNSNames=($(echo "$result" | sed -n  's/"PublicDnsName": "\([^"]*\)",/\1/p
 # Update your i2csshrc with instance public IPs  
 ############################################################
 
-tee "$scriptsFolder/.i2csshrc" <<EOF
+tee "$scriptsFolder/i2csshrc" <<EOF
 version: 2
 iterm2: true
 clusters:
@@ -94,14 +96,30 @@ i2cssh -Xi=$awsPrivateKeyPath -c aws_ors_omgr
 # inject to run it via aws cli 
 
 sudo yum -y upgrade 
+
+if [ '$osFlavor' == 'rhel' ]
+then
+# In CentOS 7 $releasever is not being resolved properly to 7
+releasever=7
 sudo tee /etc/yum.repos.d/mongodb-enterprise.repo <<EOF
 [mongodb-enterprise]
 name=MongoDB Enterprise Repository
-baseurl=https://repo.mongodb.com/yum/amazon/2013.03/mongodb-enterprise/3.4/\$basearch/
+baseurl=https://repo.mongodb.com/yum/redhat/\$releasever/mongodb-enterprise/3.4/\\\$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
 EOF
+else
+sudo tee /etc/yum.repos.d/mongodb-enterprise.repo <<EOF
+[mongodb-enterprise]
+name=MongoDB Enterprise Repository
+baseurl=https://repo.mongodb.com/yum/amazon/2013.03/mongodb-enterprise/3.4/\\\$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
+EOF
+fi
+
 
 sudo yum install -y mongodb-enterprise
 sudo mkdir -p /data/appdb/db
@@ -145,6 +163,9 @@ rs.initiate({_id: "rsAppDB", "members" : [{ "_id" : 0, "host" : "${privateDNSNam
 sleep(10000)
 rs.add('${privateDNSNames[1]}:27000')
 rs.add('${privateDNSNames[2]}:27000')
+sleep(3000)
+use admin
+db.createUser({user: 'superuser', pwd: 'secret', roles: ['root']})
 EOF
 CONFAPPDB
 
@@ -156,7 +177,7 @@ tee "$scriptsFolder/03.opsmgr.oplogdb.install.sh" <<INITDAPPDB
 sudo mkdir -p /data/oplogstore/db
 sudo chown mongod:mongod /data /data/oplogstore /data/oplogstore/db
 
-sudo -u mongod tee /data/oplogstore/mongod.conf  <<EOF 
+sudo -u mongod tee /data/oplogstore/mongod.conf  <<EOF
 systemLog:
    destination: file
    path: /data/oplogstore/mongod.log
@@ -186,7 +207,7 @@ INITDAPPDB
 tee "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" <<CONFOPLOGDB
 ############################################################
 # Backup DB: Configure MongoDB ReplicaSet
-# Run only on Server #1: ${privateDNSNames[0]}
+# Run only on Server #2: ${privateDNSNames[1]}
 ############################################################
 
 mongo --port 27001 <<EOF
@@ -194,6 +215,9 @@ rs.initiate({_id: "rsOplogStore", "members" : [{ "_id" : 0, "host" : "${privateD
 sleep(10000)
 rs.add('${privateDNSNames[0]}:27001')
 rs.add('${privateDNSNames[2]}:27001')
+sleep(3000)
+use admin
+db.createUser({user: 'superuser', pwd: 'secret', roles: ['root']})
 EOF
 CONFOPLOGDB
 
@@ -202,11 +226,35 @@ tee "$scriptsFolder/05.opsmgr.appdb.initd.sh" <<INITDAPPDB
 ############################################################
 # Ops Manager DB: Create the init.d startup scripts 
 ############################################################
+
+sudo chown -R mongod:mongod /data /data/appdb
+
+if [ '$osFlavor' == 'rhel' ]
+then
+sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/rpm/mongod.service --output /tmp/mongod.service
+
+cat /tmp/mongod.service | \
+    sed 's#/etc/mongod.conf#/data/appdb/mongod.conf#g' | \
+    sed 's#/var/run/mongodb#/data/appdb#g' | \
+    sed 's# -p /data/appdb# -p /data/appdb/db#g' | \
+    sed 's/mongod.pid/mongod-appdb.pid/g' | \
+    sed 's#Description=.*#Description=Ops Manager MongoDB instance for AppDB#g' | \
+    sudo tee /lib/systemd/system/mongod-appdb.service
+
+sudo chcon -vR --user=system_u --type=mongod_var_lib_t /data/appdb
+sudo chcon -v --user=system_u --type=mongod_unit_file_t /lib/systemd/system/mongod-appdb.service
+
+sudo systemctl enable mongod-appdb.service 
+sudo systemctl start mongod-appdb.service 
+
+else
 sed 's#/etc/mongod.conf#/data/appdb/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-appdb
 sudo chown mongod:mongod /etc/init.d/mongod-appdb
 sudo chmod +x /etc/init.d/mongod-appdb
 sudo chkconfig --add mongod-appdb
 sudo chkconfig mongod-appdb on
+fi
+
 INITDAPPDB
 
 
@@ -214,11 +262,31 @@ tee "$scriptsFolder/06.opsmgr.oplogdb.initd.sh" <<INITDOPLOGDB
 ############################################################
 # Backup DB: Create the init.d startup scripts 
 ############################################################
+if [ '$osFlavor' == 'rhel' ]
+then
+sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/rpm/mongod.service --output /tmp/mongod.service
+
+cat /tmp/mongod.service | \
+    sed 's#/etc/mongod.conf#/data/oplogstore/mongod.conf#g' | \
+    sed 's#/var/run/mongodb#/data/oplogstore#g' | \
+    sed 's# -p /data/oplogstore# -p /data/oplogstore/db#g' | \
+    sed 's#Description=.*#Description=Ops Manager MongoDB instance for OplogStore#g' | \
+    sudo tee /lib/systemd/system/mongod-oplogstore.service
+
+sudo chcon -vR --user=system_u --type=mongod_var_lib_t /data/oplogstore
+sudo chcon -v --user=system_u --type=mongod_unit_file_t /lib/systemd/system/mongod-oplogstore.service
+
+sudo systemctl enable mongod-oplogstore.service 
+sudo systemctl start mongod-oplogstore.service 
+
+else
 sed 's#/etc/mongod.conf#/data/oplogstore/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-oplogstore
 sudo chown mongod:mongod /etc/init.d/mongod-oplogstore
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
+fi
+
 INITDOPLOGDB
 
 
