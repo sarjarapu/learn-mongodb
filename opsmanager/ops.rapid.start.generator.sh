@@ -8,14 +8,15 @@
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
 ############################################################
 
-#osFlavor=amazon
-osFlavor='rhel'
+osFlavor='amzl' # amazon rhel
 awsSSHUser='ec2-user'
 awsRegionName='us-west-2'
 awsInstanceTagName='ska-ors-demo'
 awsPrivateKeyName='amazonaws_rsa'
-awsPrivateKeyPath='~/.ssh/$awsPrivateKeyName'
+awsPrivateKeyPath="~/.ssh/$awsPrivateKeyName"
 scriptsFolder='./scripts'
+rsAppDBName='rsAppDB'
+rsOplogDBName='rsOplogDB'
 rsAppDBUser='superuser'
 rsAppDBPassword='secret'
 rsAppDBRoles="'root'"
@@ -26,7 +27,7 @@ rsAppDBKeyfileSalt='secretSaltAppDB'
 rsOplogDBKeyfileSalt='secretSaltOplogDB'
 dataFolder='/data'
 appDBPort='27000'
-oplogDBPort='27000'
+oplogDBPort='27001'
 rsOplogStoreName='rsOplogStore'
 
 
@@ -48,18 +49,20 @@ mkdir $scriptsFolder
 ############################################################
 # EC2 Instance details  
 ############################################################
-# query aws instances by tag name: ska-ors-demo
-result=$(aws --region '$awsRegionName' ec2 describe-instances --filters 'Name=tag:Name,Values=$awsInstanceTagName')
+# query aws instances by tag name: ska-ors-demo, Sort the instances by private IP addresses 
+# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --filter "Name=instance-id,Values=i-005299fa916a10252" --query "Reservations[*].Instances[*].[InstanceId,PublicDnsName,PrivateDnsName]" --output text
+
+result=$(aws --region "$awsRegionName" ec2 describe-instances --filters "Name=tag:Name,Values=$awsInstanceTagName")
 
 # Stash the instances, private dns & public dns names into the array variables 
-instanceIds=($(echo '$result' | sed -n  's/'InstanceId': '\([^']*\)',/\1/p' | sed -n 's/[ ]*//p'))
-privateDNSNames=($(echo '$result' | sed -n  's/'PrivateDnsName': '\([^']*\)',/\1/p' | sed -n 's/[ ]*//p' | uniq))
-publicDNSNames=($(echo '$result' | sed -n  's/'PublicDnsName': '\([^']*\)',/\1/p' | sed -n 's/[ ]*//p' | uniq))
+instanceIds=($(echo "$result" | sed -n  's/"InstanceId": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p'))
+privateDNSNames=($(echo "$result" | sed -n  's/"PrivateDnsName": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p' | uniq))
+publicDNSNames=($(echo "$result" | sed -n  's/"PublicDnsName": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p' | uniq))
 
 : '
-printf '%s\n' '${instanceIds[@]}'
-printf '%s\n' '${privateDNSNames[@]}'
-printf '%s\n' '${publicDNSNames[@]}'
+printf '%s\n' "${instanceIds[@]}"
+printf '%s\n' "${privateDNSNames[@]}"
+printf '%s\n' "${publicDNSNames[@]}"
 '
 
 ############################################################
@@ -78,7 +81,7 @@ printf '%s\n' '${publicDNSNames[@]}'
 # Update your i2csshrc with instance public IPs  
 ############################################################
 
-tee '$scriptsFolder/i2csshrc' <<EOF
+tee "$scriptsFolder/i2csshrc" <<EOF
 version: 2
 iterm2: true
 clusters:
@@ -111,18 +114,21 @@ clusters:
       - ${publicDNSNames[17]}
 EOF
 
-cp '$scriptsFolder/i2csshrc' ~/.i2csshrc
+cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
 
-tee '$scriptsFolder/01.opsmgr.appdb.install.sh' <<INSOPSMGR
+tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
 ############################################################
 # Ops Manager DB: Installing the MongoDB
 ############################################################
 i2cssh -Xi=$awsPrivateKeyPath -c aws_ors_omgr
 
+# Double check the 3 server private name with below before you run these commands 
+# Server #1: ${privateDNSNames[0]}
+# Server #2: ${privateDNSNames[1]}
+# Server #3: ${privateDNSNames[2]}
+
 # Cmd + Shift + I
 # inject to run it via aws cli 
-
-sudo yum -y upgrade 
 
 if [ '$osFlavor' == 'rhel' ]
 then
@@ -148,6 +154,8 @@ EOF
 fi
 
 
+# Without yum -y upgrade , there is enterprise lib*.so dependency failures I have come across while automating on AMZL 
+sudo yum -y upgrade 
 sudo yum install -y mongodb-enterprise
 sudo mkdir -p $dataFolder/appdb/db
 sudo chown -R mongod:mongod $dataFolder
@@ -171,7 +179,7 @@ security:
    keyFile: $dataFolder/appdb/keyfile
 EOF
 
-sudo -u mongod sh -c 'echo $rsAppDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/appdb/keyfile'
+sudo -u mongod sh -c "echo $rsAppDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/appdb/keyfile"
 sleep 1
 sudo -u mongod sh -c 'chmod 400 $dataFolder/appdb/keyfile'
 sudo -u mongod /usr/bin/mongod --config $dataFolder/appdb/mongod.conf 
@@ -179,25 +187,25 @@ sleep 2
 INSOPSMGR
 
 
-tee '$scriptsFolder/02.opsmgr.appdb.configrs.sh' <<CONFAPPDB
+tee "$scriptsFolder/02.opsmgr.appdb.configrs.sh" <<CONFAPPDB
 ############################################################
 # Ops Manager DB: Configure MongoDB ReplicaSet
-# Run only on Server #1: ${publicDNSNames[0]} / ${privateDNSNames[0]}
+# Run only on Server #1: ${privateDNSNames[0]}
 ############################################################
 
 mongo --port $appDBPort <<EOF
 use admin
-rs.initiate({_id: '$rsAppDBName', 'members' : [{ '_id' : 0, 'host' : '${privateDNSNames[0]}:$appDBPort'}]})
+rs.initiate({_id: '$rsAppDBName', 'members' : [{ '_id' : 0, 'host' : '${privateDNSNames[0]}:$appDBPort', priority: 5 }]})
 sleep(10000)
 db.createUser({user: '$rsAppDBUser', pwd: '$rsAppDBPassword', roles: [$rsAppDBRoles]})
 db.auth('$rsAppDBUser', '$rsAppDBPassword')
-rs.add('${privateDNSNames[1]}:$appDBPort')
-rs.add('${privateDNSNames[2]}:$appDBPort')
+rs.add({ host: '${privateDNSNames[1]}:$appDBPort' })
+rs.add({ host: '${privateDNSNames[2]}:$appDBPort' })
 EOF
 CONFAPPDB
 
 
-tee '$scriptsFolder/03.opsmgr.oplogdb.install.sh' <<INITDAPPDB
+tee "$scriptsFolder/03.opsmgr.oplogdb.install.sh" <<INITDAPPDB
 ############################################################
 # Backup DB: Installing the MongoDB
 ############################################################
@@ -223,7 +231,7 @@ security:
    keyFile: $dataFolder/oplogstore/keyfile
 EOF
 
-sudo -u mongod sh -c 'echo $$rsOplogDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/oplogstore/keyfile'
+sudo -u mongod sh -c "echo $rsOplogDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/oplogstore/keyfile"
 sleep 1
 sudo -u mongod sh -c 'chmod 400 $dataFolder/oplogstore/keyfile'
 sudo -u mongod /usr/bin/mongod --config $dataFolder/oplogstore/mongod.conf 
@@ -231,7 +239,7 @@ sleep 2
 INITDAPPDB
 
 
-tee '$scriptsFolder/04.opsmgr.oplogdb.configrs.sh' <<CONFOPLOGDB
+tee "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" <<CONFOPLOGDB
 ############################################################
 # Backup DB: Configure MongoDB ReplicaSet
 # Run only on Server #2: ${privateDNSNames[1]}
@@ -239,19 +247,19 @@ tee '$scriptsFolder/04.opsmgr.oplogdb.configrs.sh' <<CONFOPLOGDB
 
 mongo --port $oplogDBPort <<EOF
 use admin
-rs.initiate({_id: '$rsOplogStoreName', 'members' : [{ '_id' : 0, 'host' : '${privateDNSNames[1]}:$oplogDBPort'}]})
+rs.initiate({_id: '$rsOplogStoreName', 'members' : [{ '_id' : 0, 'host' : '${privateDNSNames[0]}:$oplogDBPort'}]})
 sleep(10000)
 db.createUser({user: '$rsOplogDBUser', pwd: '$rsOplogDBPassword', roles: [$rsOplogDBRoles]})
 db.auth('$rsOplogDBUser', '$rsOplogDBPassword')
 
-rs.add('${privateDNSNames[0]}:$oplogDBPort')
-rs.add('${privateDNSNames[2]}:$oplogDBPort')
+rs.add({ host: '${privateDNSNames[1]}:$oplogDBPort', priority: 5 })
+rs.add({ host: '${privateDNSNames[2]}:$oplogDBPort' })
 sleep(3000)
 EOF
 CONFOPLOGDB
 
 
-tee '$scriptsFolder/05.opsmgr.appdb.initd.sh' <<INITDAPPDB
+tee "$scriptsFolder/05.opsmgr.appdb.initd.sh" <<INITDAPPDB
 ############################################################
 # Ops Manager DB: Create the init.d startup scripts 
 ############################################################
@@ -282,12 +290,13 @@ sudo chown mongod:mongod /etc/init.d/mongod-appdb
 sudo chmod +x /etc/init.d/mongod-appdb
 sudo chkconfig --add mongod-appdb
 sudo chkconfig mongod-appdb on
+sudo service mongod-appdb restart
 fi
 
 INITDAPPDB
 
 
-tee '$scriptsFolder/06.opsmgr.oplogdb.initd.sh' <<INITDOPLOGDB
+tee "$scriptsFolder/06.opsmgr.oplogdb.initd.sh" <<INITDOPLOGDB
 ############################################################
 # Backup DB: Create the init.d startup scripts 
 ############################################################
@@ -314,12 +323,13 @@ sudo chown mongod:mongod /etc/init.d/mongod-oplogstore
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
+sudo service mongod-appdb restart
 fi
 
 INITDOPLOGDB
 
 
-tee '$scriptsFolder/07.opsmgr.install.http.sh' <<INSHTTP
+tee "$scriptsFolder/07.opsmgr.install.http.sh" <<INSHTTP
 ############################################################
 # Ops Manager: Install HTTP Service
 # Server #1: ${privateDNSNames[0]}
@@ -343,7 +353,7 @@ cat /opt/mongodb/mms/conf/conf-mms.properties | sed 's#mongoUri=.*\$#mongoUri=mo
 INSHTTP
 
 
-tee '$scriptsFolder/08.opsmgr.start.http.sh' <<STARTHTTP
+tee "$scriptsFolder/08.opsmgr.start.http.sh" <<STARTHTTP
 ############################################################
 # Ops Manager: Start only one of the Server #1
 # Server #1: ${publicDNSNames[0]} / ${privateDNSNames[0]}
@@ -352,7 +362,7 @@ tee '$scriptsFolder/08.opsmgr.start.http.sh' <<STARTHTTP
 sudo service mongodb-mms start
 STARTHTTP
 
-tee '$scriptsFolder/09.opsmgr.config.http.sh' <<CONFIGHTTP
+tee "$scriptsFolder/09.opsmgr.config.http.sh" <<CONFIGHTTP
 ############################################################
 # Ops Manager: Conigure the Ops Manager via UI
 ############################################################
@@ -380,7 +390,7 @@ sudo chown mongodb-mms:mongodb-mms /backup /backup/fileSystemStore
 CONFIGHTTP
 
 
-tee '$scriptsFolder/10.opsmgr.config.backup.sh' <<CONFIGBACKUP
+tee "$scriptsFolder/10.opsmgr.config.backup.sh" <<CONFIGBACKUP
 ############################################################
 # Backup Daemon: On Server #3 create headdb folder
 # Server #3: ${privateDNSNames[2]}
@@ -401,7 +411,7 @@ sudo chown mongodb-mms:mongodb-mms /backup /backup/headdb
 CONFIGBACKUP
 
 
-tee '$scriptsFolder/11.opsmgr.install.agents.sh' <<INSAGENTS
+tee "$scriptsFolder/11.opsmgr.install.agents.sh" <<INSAGENTS
 ###############################################################
 # Install Automation Agents
 ###############################################################
@@ -431,7 +441,7 @@ sudo service mongodb-mms-automation-agent start
 INSAGENTS
 
 
-tee '$scriptsFolder/12.opsmgr.install.pool.sh' <<INSPOOL
+tee "$scriptsFolder/12.opsmgr.install.pool.sh" <<INSPOOL
 ###############################################################
 # Pool: Install Automation Agents
 ###############################################################
@@ -478,8 +488,11 @@ sudo service mongodb-mms-automation-agent start
 INSPOOL
 
 
+cat "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
+cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
 
-tee '$scriptsFolder/99.opsmgr.do.other.sh' <<OTHER
+
+tee "$scriptsFolder/90.opsmgr.do.other.sh" <<OTHER
 ###############################################################
 # Creating an existing MongoDB for Applications 
 ###############################################################
