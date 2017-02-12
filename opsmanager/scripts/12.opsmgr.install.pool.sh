@@ -2,7 +2,7 @@
 # Pool: Install Automation Agents
 ###############################################################
 
-opsmgrUri=ec2-54-202-43-118.us-west-2.compute.amazonaws.com
+opsmgrUri=ec2-54-149-191-169.us-west-2.compute.amazonaws.com
 rpmVersion=3.2.8.1942-1.x86_64
 serverPoolKey=4e324700df392529b115cb2b992efb14
 mmsApiKey=3136703d14c1919ee176180c2b5d7157

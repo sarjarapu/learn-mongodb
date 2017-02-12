@@ -6,12 +6,16 @@
 #   https://docs.opsmanager.mongodb.com/v3.4/tutorial/install-basic-deployment/
 # Tools:
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
+# Key Notes: 
+#   Amazon: t2.xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
+#   Total WTC: 5% = 3 GB. (Backups require oplog window > 24 hrs) 
+#     or Replication  Window < 0.128 GB / hour
 ############################################################
 
 osFlavor='amzl' # amazon rhel
 awsSSHUser='ec2-user'
 awsRegionName='us-west-2'
-awsInstanceTagName='ska-ors-demo'
+awsInstanceTagName='ska-ors-demo2'
 awsPrivateKeyName='amazonaws_rsa'
 awsPrivateKeyPath="~/.ssh/$awsPrivateKeyName"
 scriptsFolder='./scripts'
@@ -51,7 +55,7 @@ mkdir $scriptsFolder
 ############################################################
 # query aws instances by tag name: ska-ors-demo, Sort the instances by private IP addresses 
 # aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," | cut -d',' -f2
-result=($(aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," ))
+result=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagName" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," ))
 publicDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f1))
 privateDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f2))
 
@@ -110,7 +114,7 @@ clusters:
       - ${publicDNSNames[17]}
 EOF
 
-cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
+# cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
 
 tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
 ############################################################
@@ -486,7 +490,7 @@ INSPOOL
 
 cat "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
 cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
-
+cat "$scriptsFolder/05.opsmgr.appdb.initd.sh" "$scriptsFolder/06.opsmgr.oplogdb.initd.sh" > "$scriptsFolder/99.03.opsmgr.appdb.oplogdb.initd.sh" 
 
 tee "$scriptsFolder/90.opsmgr.do.other.sh" <<OTHER
 ###############################################################

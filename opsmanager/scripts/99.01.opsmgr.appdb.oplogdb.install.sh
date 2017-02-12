@@ -1,7 +1,7 @@
 ############################################################
 # Ops Manager DB: Installing the MongoDB
 ############################################################
-i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_omgr
+# i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_omgr
 
 # Double check the 3 server private name with below before you run these commands 
 # Server #1: ip-172-31-6-17.us-west-2.compute.internal
@@ -64,4 +64,34 @@ sudo -u mongod sh -c "echo secretSaltAppDB | openssl sha1 -sha512  | sed 's/(std
 sleep 1
 sudo -u mongod sh -c 'chmod 400 /data/appdb/keyfile'
 sudo -u mongod /usr/bin/mongod --config /data/appdb/mongod.conf 
+sleep 2
+############################################################
+# Backup DB: Installing the MongoDB
+############################################################
+sudo mkdir -p /data/oplogstore/db
+sudo chown mongod:mongod -R /data
+
+sudo -u mongod tee /data/oplogstore/mongod.conf  <<EOF
+systemLog:
+   destination: file
+   path: /data/oplogstore/mongod.log
+   logAppend: true
+storage:
+   dbPath: /data/oplogstore/db
+processManagement:
+   fork: true
+   pidFilePath: /data/oplogstore/mongod.pid
+net:
+   port: 27001
+replication:
+   replSetName: rsOplogStore
+security:
+   authorization: enabled
+   keyFile: /data/oplogstore/keyfile
+EOF
+
+sudo -u mongod sh -c "echo secretSaltOplogDB | openssl sha1 -sha512  | sed 's/(stdin)= //g' > /data/oplogstore/keyfile"
+sleep 1
+sudo -u mongod sh -c 'chmod 400 /data/oplogstore/keyfile'
+sudo -u mongod /usr/bin/mongod --config /data/oplogstore/mongod.conf 
 sleep 2

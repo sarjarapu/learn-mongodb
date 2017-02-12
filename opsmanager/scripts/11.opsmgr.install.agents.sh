@@ -4,7 +4,7 @@
 i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
 sudo yum -y upgrade 
 
-opsmgrUri=ec2-54-202-43-118.us-west-2.compute.amazonaws.com
+opsmgrUri=ec2-54-149-191-169.us-west-2.compute.amazonaws.com
 rpmVersion=3.2.8.1942-1.x86_64
 mmsGroupId=589cfc39dd9b172290a751c2
 mmsApiKey=56d23d836b0ba6c55e368a853e86de63
