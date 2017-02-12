@@ -2,7 +2,7 @@
 # Backup DB: Installing the MongoDB
 ############################################################
 sudo mkdir -p /data/oplogstore/db
-sudo chown mongod:mongod /data /data/oplogstore /data/oplogstore/db
+sudo chown mongod:mongod -R /data
 
 sudo -u mongod tee /data/oplogstore/mongod.conf  <<EOF
 systemLog:
@@ -23,8 +23,8 @@ security:
    keyFile: /data/oplogstore/keyfile
 EOF
 
-sudo -u mongod sh -c "echo secretsaltOplogStore | openssl sha1 -sha512  | sed 's/(stdin)= //g' > /data/oplogstore/keyfile"
+sudo -u mongod sh -c "echo secretSaltOplogDB | openssl sha1 -sha512  | sed 's/(stdin)= //g' > /data/oplogstore/keyfile"
 sleep 1
-sudo -u mongod sh -c "chmod 400 /data/oplogstore/keyfile"
+sudo -u mongod sh -c 'chmod 400 /data/oplogstore/keyfile'
 sudo -u mongod /usr/bin/mongod --config /data/oplogstore/mongod.conf 
 sleep 2

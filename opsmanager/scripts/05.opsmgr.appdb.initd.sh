@@ -2,9 +2,9 @@
 # Ops Manager DB: Create the init.d startup scripts 
 ############################################################
 
-sudo chown -R mongod:mongod /data /data/appdb
+sudo chown -R mongod:mongod /data
 
-if [ 'rhel' == 'rhel' ]
+if [ 'amzl' == 'rhel' ]
 then
 sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/rpm/mongod.service --output /tmp/mongod.service
 
@@ -22,5 +22,6 @@ sudo chown mongod:mongod /etc/init.d/mongod-appdb
 sudo chmod +x /etc/init.d/mongod-appdb
 sudo chkconfig --add mongod-appdb
 sudo chkconfig mongod-appdb on
+sudo service mongod-appdb restart
 fi
 

@@ -3,12 +3,15 @@
 ############################################################
 i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_omgr
 
+# Double check the 3 server private name with below before you run these commands 
+# Server #1: {
+# Server #2: "Reservations":
+# Server #3: [
+
 # Cmd + Shift + I
 # inject to run it via aws cli 
 
-sudo yum -y upgrade 
-
-if [ 'rhel' == 'rhel' ]
+if [ 'amzl' == 'rhel' ]
 then
 # In CentOS 7  is not being resolved properly to 7
 releasever=7
@@ -32,9 +35,11 @@ EOF
 fi
 
 
+# Without yum -y upgrade , there is enterprise lib*.so dependency failures I have come across while automating on AMZL 
+sudo yum -y upgrade 
 sudo yum install -y mongodb-enterprise
 sudo mkdir -p /data/appdb/db
-sudo chown mongod:mongod /data /data/appdb /data/appdb/db
+sudo chown -R mongod:mongod /data
 
 sudo -u mongod tee /data/appdb/mongod.conf  <<EOF 
 systemLog:
@@ -55,8 +60,8 @@ security:
    keyFile: /data/appdb/keyfile
 EOF
 
-sudo -u mongod sh -c "echo secretsaltAppDB | openssl sha1 -sha512  | sed 's/(stdin)= //g' > /data/appdb/keyfile"
+sudo -u mongod sh -c "echo secretSaltAppDB | openssl sha1 -sha512  | sed 's/(stdin)= //g' > /data/appdb/keyfile"
 sleep 1
-sudo -u mongod sh -c "chmod 400 /data/appdb/keyfile"
+sudo -u mongod sh -c 'chmod 400 /data/appdb/keyfile'
 sudo -u mongod /usr/bin/mongod --config /data/appdb/mongod.conf 
 sleep 2

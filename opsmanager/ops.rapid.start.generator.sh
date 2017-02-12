@@ -50,17 +50,13 @@ mkdir $scriptsFolder
 # EC2 Instance details  
 ############################################################
 # query aws instances by tag name: ska-ors-demo, Sort the instances by private IP addresses 
-# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --filter "Name=instance-id,Values=i-005299fa916a10252" --query "Reservations[*].Instances[*].[InstanceId,PublicDnsName,PrivateDnsName]" --output text
+# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," | cut -d',' -f2
+result=($(aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," ))
+publicDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f1))
+privateDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f2))
 
-result=$(aws --region "$awsRegionName" ec2 describe-instances --filters "Name=tag:Name,Values=$awsInstanceTagName")
-
-# Stash the instances, private dns & public dns names into the array variables 
-instanceIds=($(echo "$result" | sed -n  's/"InstanceId": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p'))
-privateDNSNames=($(echo "$result" | sed -n  's/"PrivateDnsName": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p' | uniq))
-publicDNSNames=($(echo "$result" | sed -n  's/"PublicDnsName": "\([^"]*\)",/\1/p' | sed -n 's/[ ]*//p' | uniq))
 
 : '
-printf '%s\n' "${instanceIds[@]}"
 printf '%s\n' "${privateDNSNames[@]}"
 printf '%s\n' "${publicDNSNames[@]}"
 '

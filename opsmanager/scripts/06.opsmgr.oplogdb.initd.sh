@@ -1,7 +1,7 @@
 ############################################################
 # Backup DB: Create the init.d startup scripts 
 ############################################################
-if [ 'rhel' == 'rhel' ]
+if [ 'amzl' == 'rhel' ]
 then
 sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/rpm/mongod.service --output /tmp/mongod.service
 
@@ -19,5 +19,6 @@ sudo chown mongod:mongod /etc/init.d/mongod-oplogstore
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
+sudo service mongod-appdb restart
 fi
 
