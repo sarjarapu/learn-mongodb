@@ -22,7 +22,7 @@
 
 ############################################################
 
-awsInstanceTagName='ska-ors-demo3'
+awsInstanceTagName='ska-ors-demo4'
 osFlavor='amzl' # amazon rhel
 awsSSHUser='ec2-user'
 
@@ -59,7 +59,7 @@ rsOplogStoreName='rsOplogStore'
 # Do not modiy anything below this 
 ############################################################
 rm -rf $scriptsFolder
-mkdir $scriptsFolder 
+mkdir $scriptsFolder $scriptsFolder/certs
 
 # rm ~/.ssh/known_hosts
 # touch ~/.ssh/known_hosts
@@ -204,7 +204,7 @@ storage:
    dbPath: $dataFolder/appdb/db
 processManagement:
    fork: true
-   pidFilePath: $dataFolder/appdb/mongod.pid
+   pidFilePath: $dataFolder/appdb/mongod-appdb.pid
 net:
    port: $appDBPort
 replication:
@@ -256,7 +256,7 @@ storage:
    dbPath: $dataFolder/oplogstore/db
 processManagement:
    fork: true
-   pidFilePath: $dataFolder/oplogstore/mongod.pid
+   pidFilePath: $dataFolder/oplogstore/mongod-oplogstore.pid
 net:
    port: $oplogDBPort
 replication:
@@ -561,15 +561,91 @@ use social
 show collections
 for(var i = 0; i < 1000; i ++) { 
     db.persons.insert({fname: 'fname ' + i, createdOn: new Date()}); 
-    sleep(10) 
 }
 db.persons.count()
+
+for(var i = 10000; i < 20000; i ++) { 
+    db.persons.insert({fname: 'fname ' + i, createdOn: new Date()}); 
+}
+
+db.persons.count()
+
+for(var i = 20000; i < 30000; i ++) { 
+    db.persons.insert({fname: 'fname ' + i, createdOn: new Date()}); 
+}
+
 EOF
 
 
 cat "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
 cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
 cat "$scriptsFolder/05.opsmgr.appdb.initd.sh" "$scriptsFolder/06.opsmgr.oplogdb.initd.sh" > "$scriptsFolder/99.03.opsmgr.appdb.oplogdb.initd.sh" 
+
+
+tee "$scriptsFolder/90.opsmgr.certificates.sh" <<CERTS
+###############################################################
+# Create certificates required for Ops Manager demo 
+###############################################################
+
+createCACertificate()
+{
+    # create CA Certificate 
+    cpath=\$1
+    cpass=\$2
+    openssl genrsa -des3 -passout pass:\$cpass -out \$cpath/rootca.private.key 4096
+    openssl req -new -x509 -days 3650 -passin pass:\$cpass -key \$cpath/rootca.private.key -out \$cpath/rootca.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
+    cat \$cpath/rootca.private.key \$cpath/rootca.public.crt > \$cpath/rootca.pem
+}
+
+createCertificate()
+{
+    # create Certificate 
+    cpath=\$1
+    cpass=\$2
+
+    spassword=\$4
+    sname=\$5
+    scpath=\$3/certs
+    orgunit=\$6
+
+    openssl genrsa -des3 -passout pass:\$spassword -out \$scpath/\$sname.private.key 4096
+    openssl req -new -passin pass:\$spassword -key \$scpath/\$sname.private.key -out \$scpath/\$sname.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=\$orgunit/CN=\$sname"
+    openssl x509 -req -extfile \$cpath/extensions.conf -passin pass:\$cpass -days 365 -in \$scpath/\$sname.csr -CA \$cpath/rootca.public.crt -CAkey \$cpath/rootca.private.key -set_serial 01 -out \$scpath/\$sname.public.crt
+    cat \$scpath/\$sname.private.key \$scpath/\$sname.public.crt > \$scpath/\$sname.pem
+}
+
+
+# Generate the Certificate Authority
+caCertsPath=$scriptsFolder/certs
+caPassword=secret_ca
+
+# Create the extensions file 
+echo "[extensions]
+keyUsage = digitalSignature
+extendedKeyUsage = clientAuth" | tee \$caCertsPath/extensions.conf 
+sleep 1
+
+createCACertificate \$caCertsPath \$caPassword
+sleep 2
+
+# Certificates for HTTPS Web
+# Generate the certificate for server and sign it with ca 
+serverName='ska-clb-01-2076939081.us-west-2.elb.amazonaws.com'
+serverPath=$scriptsFolder/
+serverPassword=secret_lb_https
+createCertificate \$caCertsPath \$caPassword \$serverPath \$serverPassword \$serverName Consulting
+sleep 2
+
+
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${publicDNSNames[1]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${publicDNSNames[2]}:/home/$awsSSHUser"
+
+echo "sudo mv $serverName.pem /etc/security/opsmanager.pem"
+echo "X-Forwarded-For"
+CERTS
+
+
 
 tee "$scriptsFolder/90.opsmgr.do.other.sh" <<OTHER
 ###############################################################
