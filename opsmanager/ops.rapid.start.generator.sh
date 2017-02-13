@@ -7,7 +7,7 @@
 # Tools:
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
 # Notes: 
-#   Amazon: t2.xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
+#   Amazon: m4.xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
 #   Total WTC: 5% = 3 GB. (Backups require oplog window > 24 hrs) 
 #     or Replication  Window < 0.128 GB / hour
 #   If init.d scripts aren't starting the process delete /data/appdb/mongod.pid 
@@ -15,6 +15,11 @@
 #   http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com:8080/user/login
 # 
 #   Issues: How to manually restore .tar > .cpgz file ?
+# sudo yum install -y xfsprogs xfsdump
+# lsblk
+# sudo mkfs.xfs /dev/xvdf
+# sudo mkdir /backup
+
 ############################################################
 
 awsInstanceTagName='ska-ors-demo3'
@@ -56,8 +61,8 @@ rsOplogStoreName='rsOplogStore'
 rm -rf $scriptsFolder
 mkdir $scriptsFolder 
 
-rm ~/.ssh/known_hosts
-touch ~/.ssh/known_hosts
+# rm ~/.ssh/known_hosts
+# touch ~/.ssh/known_hosts
 
 ############################################################
 # EC2 Instance details  
