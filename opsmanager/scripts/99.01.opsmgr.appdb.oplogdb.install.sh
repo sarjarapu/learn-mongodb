@@ -1,6 +1,7 @@
 ############################################################
 # Ops Manager DB: Installing the MongoDB
 ############################################################
+# Run this command on your local box
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_omgr
 
 # Double check the 3 server private name with below before you run these commands 

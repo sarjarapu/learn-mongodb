@@ -6,16 +6,19 @@
 #   https://docs.opsmanager.mongodb.com/v3.4/tutorial/install-basic-deployment/
 # Tools:
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
-# Key Notes: 
+# Notes: 
 #   Amazon: t2.xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
 #   Total WTC: 5% = 3 GB. (Backups require oplog window > 24 hrs) 
 #     or Replication  Window < 0.128 GB / hour
+#   If init.d scripts aren't starting the process delete /data/appdb/mongod.pid 
+#   init.d script needs some fix in deleting the pid 
+# How to manually restore .tar > .cpgz file ?
 ############################################################
 
 osFlavor='amzl' # amazon rhel
 awsSSHUser='ec2-user'
 awsRegionName='us-west-2'
-awsInstanceTagName='ska-ors-demo2'
+awsInstanceTagName='ska-ors-demo'
 awsPrivateKeyName='amazonaws_rsa'
 awsPrivateKeyPath="~/.ssh/$awsPrivateKeyName"
 scriptsFolder='./scripts'
@@ -115,12 +118,14 @@ clusters:
 EOF
 
 # cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
+scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
 
 tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
 ############################################################
 # Ops Manager DB: Installing the MongoDB
 ############################################################
-i2cssh -Xi=$awsPrivateKeyPath -c aws_ors_omgr
+# Run this command on your local box
+# i2cssh -Xi=$awsPrivateKeyPath -c aws_ors_omgr
 
 # Double check the 3 server private name with below before you run these commands 
 # Server #1: ${privateDNSNames[0]}
@@ -285,8 +290,8 @@ sudo systemctl enable mongod-appdb.service
 sudo systemctl start mongod-appdb.service 
 
 else
+# Amazon Linux init.d scripts works. Delete /data/appdata/mongod.pid file if it doesnt 
 sed 's#/etc/mongod.conf#$dataFolder/appdb/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-appdb
-sudo chown mongod:mongod /etc/init.d/mongod-appdb
 sudo chmod +x /etc/init.d/mongod-appdb
 sudo chkconfig --add mongod-appdb
 sudo chkconfig mongod-appdb on
@@ -318,8 +323,8 @@ sudo systemctl enable mongod-oplogstore.service
 sudo systemctl start mongod-oplogstore.service 
 
 else
+# Amazon Linux init.d scripts works. Delete /data/oplogstore/mongod.pid file if it doesnt 
 sed 's#/etc/mongod.conf#$dataFolder/oplogstore/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-oplogstore
-sudo chown mongod:mongod /etc/init.d/mongod-oplogstore
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
@@ -328,6 +333,25 @@ fi
 
 INITDOPLOGDB
 
+# TODO: Have clean up scripts in here 
+
+tee "$scriptsFolder/07.opsmgr.oplogdb.initd.cleanup.sh" <<INITDCLEANUP
+############################################################
+# Backup DB: Create the init.d startup scripts 
+############################################################
+if [ '$osFlavor' == 'rhel' ]
+then
+sudo systemctl stop mongod.service 
+sudo systemctl disable mongod.service 
+sudo rm -f /lib/systemd/system/mongod.service
+else
+# Amazon Linux init.d scripts works. Delete /data/oplogstore/mongod.pid file if it doesnt 
+sudo service mongod stop
+sudo chkconfig mongod off
+sudo chkconfig --del mongod
+sudo rm -f /etc/init.d/mongod
+fi
+INITDCLEANUP
 
 tee "$scriptsFolder/07.opsmgr.install.http.sh" <<INSHTTP
 ############################################################
@@ -415,22 +439,22 @@ tee "$scriptsFolder/11.opsmgr.install.agents.sh" <<INSAGENTS
 ###############################################################
 # Install Automation Agents
 ###############################################################
-i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
+# i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
 sudo yum -y upgrade 
 
 opsmgrUri=${publicDNSNames[0]}
 rpmVersion=3.2.8.1942-1.x86_64
-mmsGroupId=589cfc39dd9b172290a751c2
-mmsApiKey=56d23d836b0ba6c55e368a853e86de63
+mmsGroupId=58a06a2bfb6c6a0c521d095b
+mmsApiKey=e71ea9919bdedf5cdd8120189c8318aa
 
 
 curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager-\$rpmVersion.rpm
 sudo rpm -U mongodb-mms-automation-agent-manager-\$rpmVersion.rpm
 
 sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.config
-sudo sed 's/mmsGroupId=.*\$/mmsGroupId=\$mmsGroupId/g' /etc/mongodb-mms/automation-agent.config | \
-    sed 's/mmsApiKey=.*\$/mmsApiKey=\$mmsApiKey/g' | \
-    sed 's/mmsBaseUrl=.*\$/mmsBaseUrl=http:\/\/\$opsmgrUri:8080/g' | \
+sudo sed "s/mmsGroupId=.*\$/mmsGroupId=\$mmsGroupId/g" /etc/mongodb-mms/automation-agent.config | \
+    sed "s/mmsApiKey=.*\$/mmsApiKey=\$mmsApiKey/g" | \
+    sed "s/mmsBaseUrl=.*\$/mmsBaseUrl=http:\/\/\$opsmgrUri:8080/g" | \
     tee /tmp/automation-agent.config
 sudo -u mongod cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config

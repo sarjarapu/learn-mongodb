@@ -14,8 +14,8 @@ sudo systemctl enable mongod-oplogstore.service
 sudo systemctl start mongod-oplogstore.service 
 
 else
+# Amazon Linux init.d scripts works. Delete /data/oplogstore/mongod.pid file if it doesnt 
 sed 's#/etc/mongod.conf#/data/oplogstore/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-oplogstore
-sudo chown mongod:mongod /etc/init.d/mongod-oplogstore
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on

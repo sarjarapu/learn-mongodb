@@ -17,8 +17,8 @@ sudo systemctl enable mongod-appdb.service
 sudo systemctl start mongod-appdb.service 
 
 else
+# Amazon Linux init.d scripts works. Delete /data/appdata/mongod.pid file if it doesnt 
 sed 's#/etc/mongod.conf#/data/appdb/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-appdb
-sudo chown mongod:mongod /etc/init.d/mongod-appdb
 sudo chmod +x /etc/init.d/mongod-appdb
 sudo chkconfig --add mongod-appdb
 sudo chkconfig mongod-appdb on
