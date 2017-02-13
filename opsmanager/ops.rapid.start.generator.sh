@@ -17,10 +17,11 @@
 #   Issues: How to manually restore .tar > .cpgz file ?
 ############################################################
 
+awsInstanceTagName='ska-ors-demo3'
 osFlavor='amzl' # amazon rhel
 awsSSHUser='ec2-user'
+
 awsRegionName='us-west-2'
-awsInstanceTagName='ska-ors-demo'
 awsPrivateKeyName='amazonaws_rsa'
 awsPrivateKeyPath="~/.ssh/$awsPrivateKeyName"
 scriptsFolder='./scripts'
@@ -55,6 +56,9 @@ rsOplogStoreName='rsOplogStore'
 rm -rf $scriptsFolder
 mkdir $scriptsFolder 
 
+rm ~/.ssh/known_hosts
+touch ~/.ssh/known_hosts
+
 ############################################################
 # EC2 Instance details  
 ############################################################
@@ -65,6 +69,11 @@ publicDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f1))
 privateDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f2))
 instanceIds=($(printf '%s\n' "${result[@]}" | cut -d',' -f3))
 
+
+
+############################################################
+# Create machine.info lookup file 
+############################################################
 echo "`printf '%s\n' "${result[@]}"`
 
 http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com
@@ -73,13 +82,16 @@ http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com
 ${instanceIds[0]}
 ${instanceIds[1]}
 ${instanceIds[2]}
-" > "$scriptsFolder/machines.info.txt"
+
 
 : '
 printf '%s\n' "${privateDNSNames[@]}"
 printf '%s\n' "${publicDNSNames[@]}"
 printf '%s\n' "${instanceIds[@]}"
 '
+
+" > "$scriptsFolder/machines.info.txt"
+
 
 ############################################################
 # Install a Basic Production Deployment on RHEL or Amazon Linux
@@ -341,7 +353,7 @@ sed 's#/etc/mongod.conf#$dataFolder/oplogstore/mongod.conf#g' /etc/init.d/mongod
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
-sudo service mongod-appdb restart
+sudo service mongod-oplogstore restart
 fi
 
 INITDOPLOGDB
@@ -396,7 +408,12 @@ tee "$scriptsFolder/08.opsmgr.start.http.sh" <<STARTHTTP
 # Server #1: ${publicDNSNames[0]} / ${privateDNSNames[0]}
 # Notes: Will take 5 mins. 
 ############################################################
+
+# Upload the aws private key to the amazon instance 
+# scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
+
 sudo service mongodb-mms start
+
 STARTHTTP
 
 tee "$scriptsFolder/09.opsmgr.config.http.sh" <<CONFIGHTTP
@@ -411,7 +428,6 @@ tee "$scriptsFolder/09.opsmgr.config.http.sh" <<CONFIGHTTP
 # Ops Manager: Copy /etc/mongodb-mms/gen.key from Server #1 to #3
 # Copy gen.key, start mms, create backup deamon folder
 ############################################################
-scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
 sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDNSNames[2]}:/home/$awsSSHUser
 sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDNSNames[1]}:/home/$awsSSHUser
 
@@ -422,16 +438,18 @@ sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDN
 sudo mv gen.key /etc/mongodb-mms/gen.key
 sudo chown mongodb-mms:mongodb-mms /etc/mongodb-mms/gen.key
 sudo service mongodb-mms start
+CONFIGHTTP
+
+
+tee "$scriptsFolder/10.opsmgr.config.backup.sh" <<CONFIGBACKUP
 
 ############################################################
 # Filesystem Store: On Ops Manager HTTP Server # 1 & #3
 ############################################################
 sudo mkdir -p /backup/fileSystemStore
 sudo chown mongodb-mms:mongodb-mms /backup /backup/fileSystemStore
-CONFIGHTTP
 
 
-tee "$scriptsFolder/10.opsmgr.config.backup.sh" <<CONFIGBACKUP
 ############################################################
 # Backup Daemon: On Server #3 create headdb folder
 # Server #3: ${privateDNSNames[2]}
@@ -445,10 +463,13 @@ sudo chown mongodb-mms:mongodb-mms /backup /backup/headdb
 # enable daemon
 # /backup/fileSystemStore
 
+# servers: ${privateDNSNames[0]}:$oplogDBPort,${privateDNSNames[1]}:$oplogDBPort,${privateDNSNames[2]}:$oplogDBPort
 # user: $rsOplogDBUser
 # password: $rsOplogDBPassword
-# servers: ${privateDNSNames[0]}:$oplogDBPort,${privateDNSNames[1]}:$oplogDBPort,${privateDNSNames[2]}:$oplogDBPort
 # options: authSource=admin&replicaSet=$rsOplogStoreName&maxPoolSize=150
+
+# Install Backup Agent on the deployment 
+
 CONFIGBACKUP
 
 
@@ -527,6 +548,18 @@ sudo service mongodb-mms-automation-agent start
 
 # regex  ip-172-31-13-163|ip-172-31-6-73|ip-172-31-8-94
 INSPOOL
+
+
+tee "$scriptsFolder/13.generate.backup.restore.data.sh" <<EOF
+show dbs
+use social 
+show collections
+for(var i = 0; i < 1000; i ++) { 
+    db.persons.insert({fname: 'fname ' + i, createdOn: new Date()}); 
+    sleep(10) 
+}
+db.persons.count()
+EOF
 
 
 cat "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 

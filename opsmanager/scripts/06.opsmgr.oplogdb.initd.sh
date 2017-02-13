@@ -19,6 +19,6 @@ sed 's#/etc/mongod.conf#/data/oplogstore/mongod.conf#g' /etc/init.d/mongod | sud
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
-sudo service mongod-appdb restart
+sudo service mongod-oplogstore restart
 fi
 

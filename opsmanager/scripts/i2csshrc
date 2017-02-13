@@ -4,18 +4,18 @@ clusters:
   aws_ors_omgr:
     login: ec2-user
     hosts:
-      - ec2-54-149-235-81.us-west-2.compute.amazonaws.com
-      - ec2-54-186-61-188.us-west-2.compute.amazonaws.com
-      - ec2-54-202-141-181.us-west-2.compute.amazonaws.com
+      - ec2-54-186-26-151.us-west-2.compute.amazonaws.com
+      - ec2-54-187-151-208.us-west-2.compute.amazonaws.com
+      - ec2-54-200-198-89.us-west-2.compute.amazonaws.com
   aws_ors_mongo:
     login: ec2-user
     hosts:
-      - ec2-54-202-213-153.us-west-2.compute.amazonaws.com
-      - ec2-54-202-25-217.us-west-2.compute.amazonaws.com
-      - ec2-54-202-26-44.us-west-2.compute.amazonaws.com
-      - ec2-54-212-236-197.us-west-2.compute.amazonaws.com
-      - ec2-54-213-245-105.us-west-2.compute.amazonaws.com
-      - ec2-54-214-168-204.us-west-2.compute.amazonaws.com
+      - ec2-54-200-80-101.us-west-2.compute.amazonaws.com
+      - ec2-54-202-127-244.us-west-2.compute.amazonaws.com
+      - ec2-54-212-213-115.us-west-2.compute.amazonaws.com
+      - ec2-54-212-232-156.us-west-2.compute.amazonaws.com
+      - ec2-54-213-151-140.us-west-2.compute.amazonaws.com
+      - ec2-54-214-218-25.us-west-2.compute.amazonaws.com
       - 
       - 
       - 
