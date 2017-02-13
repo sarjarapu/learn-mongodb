@@ -5,9 +5,9 @@
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_omgr
 
 # Double check the 3 server private name with below before you run these commands 
-# Server #1: ip-172-31-6-17.us-west-2.compute.internal
-# Server #2: ip-172-31-8-235.us-west-2.compute.internal
-# Server #3: ip-172-31-9-51.us-west-2.compute.internal
+# Server #1: ip-172-31-41-82.us-west-2.compute.internal
+# Server #2: ip-172-31-45-56.us-west-2.compute.internal
+# Server #3: ip-172-31-46-255.us-west-2.compute.internal
 
 # Cmd + Shift + I
 # inject to run it via aws cli 

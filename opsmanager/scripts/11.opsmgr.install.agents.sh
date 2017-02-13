@@ -4,18 +4,10 @@
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
 sudo yum -y upgrade 
 
-###############################################################
-# NOTE: Make sure you replace below values before you run the script
-###############################################################
-
-opsmgrUri=ec2-54-149-191-169.us-west-2.compute.amazonaws.com
+opsmgrUri=ec2-54-149-235-81.us-west-2.compute.amazonaws.com
 rpmVersion=3.2.8.1942-1.x86_64
-mmsGroupId=58a06a2bfb6c6a0c521d095b
-mmsApiKey=e71ea9919bdedf5cdd8120189c8318aa
-
-
-
-
+mmsGroupId=58a11019d0f6c8231193df72
+mmsApiKey=be6793ccfb0a74b2b239650fa788367f
 
 
 curl -OL http://$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager-$rpmVersion.rpm

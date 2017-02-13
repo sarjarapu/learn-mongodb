@@ -12,7 +12,9 @@
 #     or Replication  Window < 0.128 GB / hour
 #   If init.d scripts aren't starting the process delete /data/appdb/mongod.pid 
 #   init.d script needs some fix in deleting the pid 
-# How to manually restore .tar > .cpgz file ?
+#   http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com:8080/user/login
+# 
+#   Issues: How to manually restore .tar > .cpgz file ?
 ############################################################
 
 osFlavor='amzl' # amazon rhel
@@ -57,15 +59,26 @@ mkdir $scriptsFolder
 # EC2 Instance details  
 ############################################################
 # query aws instances by tag name: ska-ors-demo, Sort the instances by private IP addresses 
-# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," | cut -d',' -f2
-result=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagName" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName]" --output text | sort | tr "\t" "," ))
+# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo*" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,InstanceIds]" --output text | sort | tr "\t" "," | cut -d',' -f1
+result=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagName" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,InstanceId]" --output text | sort | tr "\t" "," ))
 publicDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f1))
 privateDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f2))
+instanceIds=($(printf '%s\n' "${result[@]}" | cut -d',' -f3))
 
+echo "`printf '%s\n' "${result[@]}"`
+
+http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com
+:8080
+/user/login
+${instanceIds[0]}
+${instanceIds[1]}
+${instanceIds[2]}
+" > "$scriptsFolder/machines.info.txt"
 
 : '
 printf '%s\n' "${privateDNSNames[@]}"
 printf '%s\n' "${publicDNSNames[@]}"
+printf '%s\n' "${instanceIds[@]}"
 '
 
 ############################################################
@@ -117,8 +130,8 @@ clusters:
       - ${publicDNSNames[17]}
 EOF
 
-# cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
-scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
+cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
+
 
 tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
 ############################################################
@@ -402,6 +415,10 @@ scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/
 sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDNSNames[2]}:/home/$awsSSHUser
 sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDNSNames[1]}:/home/$awsSSHUser
 
+
+############################################################
+# Configure Server #1 to #3 and start the mongodb-mms service
+############################################################
 sudo mv gen.key /etc/mongodb-mms/gen.key
 sudo chown mongodb-mms:mongodb-mms /etc/mongodb-mms/gen.key
 sudo service mongodb-mms start
@@ -444,8 +461,8 @@ sudo yum -y upgrade
 
 opsmgrUri=${publicDNSNames[0]}
 rpmVersion=3.2.8.1942-1.x86_64
-mmsGroupId=58a06a2bfb6c6a0c521d095b
-mmsApiKey=e71ea9919bdedf5cdd8120189c8318aa
+mmsGroupId=58a11019d0f6c8231193df72
+mmsApiKey=be6793ccfb0a74b2b239650fa788367f
 
 
 curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager-\$rpmVersion.rpm
@@ -842,3 +859,7 @@ sudo chmod 755 /etc/init.d/disable-transparent-hugepages
 chkconfig disable-transparent-hugepages on
 
 OTHER
+
+# scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
+
+

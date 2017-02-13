@@ -4,27 +4,27 @@ clusters:
   aws_ors_omgr:
     login: ec2-user
     hosts:
-      - ec2-54-149-191-169.us-west-2.compute.amazonaws.com
-      - ec2-54-149-192-23.us-west-2.compute.amazonaws.com
-      - ec2-54-149-228-203.us-west-2.compute.amazonaws.com
+      - ec2-54-149-235-81.us-west-2.compute.amazonaws.com
+      - ec2-54-186-61-188.us-west-2.compute.amazonaws.com
+      - ec2-54-202-141-181.us-west-2.compute.amazonaws.com
   aws_ors_mongo:
     login: ec2-user
     hosts:
-      - ec2-54-186-146-77.us-west-2.compute.amazonaws.com
-      - ec2-54-186-152-73.us-west-2.compute.amazonaws.com
-      - ec2-54-186-157-18.us-west-2.compute.amazonaws.com
-      - ec2-54-186-245-234.us-west-2.compute.amazonaws.com
-      - ec2-54-191-137-52.us-west-2.compute.amazonaws.com
-      - ec2-54-191-232-43.us-west-2.compute.amazonaws.com
-      - ec2-54-200-202-75.us-west-2.compute.amazonaws.com
-      - ec2-54-200-46-6.us-west-2.compute.amazonaws.com
-      - ec2-54-202-102-192.us-west-2.compute.amazonaws.com
+      - ec2-54-202-213-153.us-west-2.compute.amazonaws.com
+      - ec2-54-202-25-217.us-west-2.compute.amazonaws.com
+      - ec2-54-202-26-44.us-west-2.compute.amazonaws.com
+      - ec2-54-212-236-197.us-west-2.compute.amazonaws.com
+      - ec2-54-213-245-105.us-west-2.compute.amazonaws.com
+      - ec2-54-214-168-204.us-west-2.compute.amazonaws.com
+      - 
+      - 
+      - 
   aws_ors_pool:
     login: ec2-user
     hosts:
-      - ec2-54-202-107-75.us-west-2.compute.amazonaws.com
-      - ec2-54-202-54-72.us-west-2.compute.amazonaws.com
-      - ec2-54-202-71-67.us-west-2.compute.amazonaws.com
+      - 
+      - 
+      - 
       - 
       - 
       - 
