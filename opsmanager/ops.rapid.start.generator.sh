@@ -73,6 +73,14 @@ fi
 # Change app/data/ to default mongod.conf
 # may be leave the log pid files in the default place but with soft linkes ?
 
+
+############################################################
+# Gotcha's
+############################################################
+# After reboot /var/run/mongod.pid file got deleted, try to plug it into the .service file 
+# After reboot /mount points for the /data is missing 
+
+
 ############################################################
 # Do not modiy anything below this 
 ############################################################
@@ -190,12 +198,26 @@ tee "$scriptsFolder/00.drive.creation.sh" <<DRIVEC
 ############################################################
 # Optional: Create drive mapping for /data 
 ############################################################
+sudo apt-get install xfsprogs
 lsblk
-sudo mkfs.ext4 /dev/xvdb
+# sudo umount /dev/xvdb1
+# sudo fdisk /dev/xvdb
+# n - new partition
+# p - primary 
+# pn - 1
+#
+#
+# w
+sudo mkfs.xfs -f /dev/xvdb1
 sudo mkdir -p /data
-sudo mount /dev/xvdb /data
-sudo chown -R $mongoUser:$mongoUser /data
+sudo mount /dev/xvdb1 /data
 
+# mongodb user not available until mongodb is installed 
+# sudo chown -R $mongoUser:$mongoUser /data
+
+# Use 'blkid' to print the universally unique identifier for a
+# <file system> <mount point> <type> <options> <dump> <pass>
+echo '/dev/xvdb1		/data	 xfs	defaults,noatime		0 0' >> /etc/fstab
 
 DRIVEC
 
@@ -227,6 +249,9 @@ gpgcheck=1
 enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
 EOF
+sudo yum -y upgrade 
+sudo yum install -y mongodb-enterprise
+
 elif [ '$osFlavor' == 'amazon' ]
 then
 sudo tee /etc/yum.repos.d/mongodb-enterprise.repo <<EOF
@@ -237,30 +262,26 @@ gpgcheck=1
 enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
 EOF
+sudo yum -y upgrade 
+sudo yum install -y mongodb-enterprise
+
 else
 sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
 echo "deb [ arch=amd64,arm64,ppc64el,s390x ] http://repo.mongodb.com/apt/ubuntu xenial/mongodb-enterprise/3.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-enterprise.list
-
+sudo apt-get update
+sudo apt-get install -y mongodb-enterprise
 fi
 
 # Without yum -y upgrade , there is enterprise lib*.so dependency failures I have come across while automating on amazon_linux 
-if [ '$osFlavor' == 'ubuntu' ]
-sudo apt-get update
-sudo apt-get install -y mongodb-enterprise
-else
-sudo yum -y upgrade 
-sudo yum install -y mongodb-enterprise
-fi
+
 
 sudo mkdir -p $dataFolder/db
 sudo chown -R $mongoUser:$mongoUser $dataFolder
 sudo rm -rf /var/lib/mongodb
 sudo ln -s /data/db /var/lib/mongodb
-sudo touch /var/run/mongod.pid
-sudo touch /var/run/mongod-oplogstore.pid
-sudo chown $mongoUser:$mongoUser /var/run/mongod.pid
-sudo chown $mongoUser:$mongoUser /var/run/mongod-oplogstore.pid
-sudo chown -R $mongoUser:$mongoUser /var/lib/mongodb
+sudo mkdir -p /var/run/mongodb /var/lib/mongodb /var/log/mongodb/
+sudo chown -R $mongoUser:$mongoUser /var/run/mongodb /var/lib/mongodb /var/log/mongodb/
+# sudo chown -R $mongoUser:$mongoUser /var/lib/mongodb 
 
 # Ubuntu didn't work 
 #     with -u ; just run without  -u $mongoUser
@@ -277,7 +298,7 @@ systemLog:
 storage:
    dbPath: $dataFolder/db
 processManagement:
-   pidFilePath: /var/run/mongod.pid
+   pidFilePath: /var/run/mongodb/mongod.pid
    fork: $isForkable
 net:
    port: $appDBPort
@@ -339,7 +360,7 @@ systemLog:
 storage:
    dbPath: $dataFolder/oplogstore
 processManagement:
-   pidFilePath: /var/run/mongod-oplogstore.pid
+   pidFilePath: /var/run/mongodb/mongod-oplogstore.pid
    fork: $isForkable
 net:
    port: $oplogDBPort
@@ -359,7 +380,7 @@ sudo -u $mongoUser sh -c 'chmod 400 $dataFolder/oplogstore/keyfile'
 
 
 
-sudo service mongod-oplogstore start
+# sudo service mongod-oplogstore start
 sleep 2
 INITDAPPDB
 
@@ -460,7 +481,6 @@ cat /lib/systemd/system/mongod.service | \
     sudo tee /lib/systemd/system/mongod-oplogstore.service
 
 sudo systemctl enable mongod-oplogstore.service 
-sudo systemctl start mongod-oplogstore.service 
 sudo service mongod-oplogstore start 
 fi
 
@@ -681,9 +701,8 @@ for(var i = 20000; i < 30000; i ++) {
 EOF
 
 
-cat "$scriptsFolder/00.drive.creation.sh" "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
+cat "$scriptsFolder/00.drive.creation.sh" "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" "$scriptsFolder/06.opsmgr.oplogdb.initd.sh"  > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
 cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
-cat "$scriptsFolder/05.opsmgr.appdb.initd.sh" "$scriptsFolder/06.opsmgr.oplogdb.initd.sh" > "$scriptsFolder/99.03.opsmgr.appdb.oplogdb.initd.sh" 
 
 
 tee "$scriptsFolder/90.opsmgr.certificates.sh" <<CERTS
