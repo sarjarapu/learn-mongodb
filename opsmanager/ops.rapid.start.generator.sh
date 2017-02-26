@@ -7,7 +7,7 @@
 # Tools:
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
 # Notes: 
-#   Amazon: m4.xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
+#   Amazon: m4.2xlarge, 16+60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
 #   Total WTC: 5% = 3 GB. (Backups require oplog window > 24 hrs) 
 #     or Replication  Window < 0.128 GB / hour
 #   If init.d scripts aren't starting the process delete /data/appdb/mongod.pid 
@@ -22,9 +22,11 @@
 
 ############################################################
 
-awsInstanceTagName='ska-ors-demo4'
-osFlavor='amzl' # amazon rhel
+awsInstanceTagName='ska-ors'
+# expects to have images ska-ors-omgr, ska-ors-mongo and ska-ors-pool
+osFlavor='ubuntu' # amazon_linux rhel ubuntu
 awsSSHUser='ec2-user'
+useArbiter='true'
 
 awsRegionName='us-west-2'
 awsPrivateKeyName='amazonaws_rsa'
@@ -44,6 +46,19 @@ dataFolder='/data'
 appDBPort='27000'
 oplogDBPort='27001'
 rsOplogStoreName='rsOplogStore'
+mongoUser='mongod'
+isForkable='true' #fork: true in config setting. Not applicable in Windows. 
+
+addOther='add'
+if [ "$useArbiter" == "true" ]; then
+	addOther='addArb'
+fi
+
+if [ "$osFlavor" == "ubuntu" ]; then
+	mongoUser='mongodb'
+    awsSSHUser='ubuntu'
+    isForkable='false'
+fi
 
 
 # Thinks I might want to customize in here 
@@ -54,6 +69,9 @@ rsOplogStoreName='rsOplogStore'
 # clean up of default installed mongodb or reuse it for the appdb 
 # change the path and replicaset names real quick 
 # start up scripts is becoming major head ache  for each OS. have them working 
+# Tags: ska-ors-omgr ska-ors-demo ska-ors-import ska-ors-pool 
+# Change app/data/ to default mongod.conf
+# may be leave the log pid files in the default place but with soft linkes ?
 
 ############################################################
 # Do not modiy anything below this 
@@ -68,31 +86,48 @@ mkdir $scriptsFolder $scriptsFolder/certs
 # EC2 Instance details  
 ############################################################
 # query aws instances by tag name: ska-ors-demo, Sort the instances by private IP addresses 
-# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo*" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,InstanceIds]" --output text | sort | tr "\t" "," | cut -d',' -f1
-result=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagName" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,InstanceId]" --output text | sort | tr "\t" "," ))
-publicDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f1))
-privateDNSNames=($(printf '%s\n' "${result[@]}" | cut -d',' -f2))
-instanceIds=($(printf '%s\n' "${result[@]}" | cut -d',' -f3))
+# aws ec2 describe-instances --region "us-west-2" --filter "Name=tag:Name,Values=ska-ors-demo*" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,omgrInstanceIds]" --output text | sort | tr "\t" "," | cut -d',' -f1
+omgrResult=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagName-omgr" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,InstanceId,Tags[?Key=='Name'].Value[] | [0]]" --output text | sort | tr "\t" "," ))
+omgrPublicDNS=($(printf '%s\n' "${omgrResult[@]}" | cut -d',' -f1))
+omgrPrivateDNS=($(printf '%s\n' "${omgrResult[@]}" | cut -d',' -f2))
+omgrInstanceIds=($(printf '%s\n' "${omgrResult[@]}" | cut -d',' -f3))
+
+mongoResult=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagName-mongo" --query "Reservations[*].Instances[*].[PublicDnsName,PrivateDnsName,InstanceId,Tags[?Key=='Name'].Value[] | [0]]" --output text | sort | tr "\t" "," ))
+mongoPublicDNS=($(printf '%s\n' "${mongoResult[@]}" | cut -d',' -f1))
+mongoPrivateDNS=($(printf '%s\n' "${mongoResult[@]}" | cut -d',' -f2))
+mongoInstanceIds=($(printf '%s\n' "${mongoResult[@]}" | cut -d',' -f3))
+
 
 
 
 ############################################################
 # Create machine.info lookup file 
 ############################################################
-echo "`printf '%s\n' "${result[@]}"`
+echo "
+# Ops Manager 
+`printf '%s\n' "${omgrResult[@]}"`
 
+# Mongo
+`printf '%s\n' "${mongoResult[@]}"`
+
+# Load Balancer configuration
 http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com
 :8080
 /user/login
-${instanceIds[0]}
-${instanceIds[1]}
-${instanceIds[2]}
+${omgrInstanceIds[0]}
+${omgrInstanceIds[1]}
+${omgrInstanceIds[2]}
 
-
+# TODO: Fix the \n escape 
 : '
-printf '%s\n' "${privateDNSNames[@]}"
-printf '%s\n' "${publicDNSNames[@]}"
-printf '%s\n' "${instanceIds[@]}"
+printf '%s\\n' "\${omgrPrivateDNS[@]}"
+printf '%s\\n' "\${omgrPublicDNS[@]}"
+printf '%s\\n' "\${omgrInstanceIds[@]}"
+
+printf '%s\\n' "\${mongoPrivateDNS[@]}"
+printf '%s\\n' "\${mongoPublicDNS[@]}"
+printf '%s\\n' "\${mongoInstanceIds[@]}"
+
 '
 
 " > "$scriptsFolder/machines.info.txt"
@@ -104,12 +139,12 @@ printf '%s\n' "${instanceIds[@]}"
 ############################################################
 
 # Setup: 
-# Servers:  server-1    server-2    server-3
-#   AppDB:  primary     secondary   secondary
-#  OplgDB:  secondary   primary     secondary
-#  OpsWeb:  http        http
-#  Daemon:              BackupD
-
+# Servers:  server-1      server-2       server-3
+#   AppDB:  primary       secondary      sec / arb
+#  OplgDB:  sec / arb     secondary      primary
+#  OpsWeb:  http        
+#  Daemon:                BackupD
+# File SS:  mount 
 ############################################################
 # Update your i2csshrc with instance public IPs  
 ############################################################
@@ -121,33 +156,48 @@ clusters:
   aws_ors_omgr:
     login: $awsSSHUser
     hosts:
-      - ${publicDNSNames[0]}
-      - ${publicDNSNames[1]}
-      - ${publicDNSNames[2]}
+      - ${omgrPublicDNS[0]}
+      - ${omgrPublicDNS[1]}
+      - ${omgrPublicDNS[2]}
   aws_ors_mongo:
     login: $awsSSHUser
     hosts:
-      - ${publicDNSNames[3]}
-      - ${publicDNSNames[4]}
-      - ${publicDNSNames[5]}
-      - ${publicDNSNames[6]}
-      - ${publicDNSNames[7]}
-      - ${publicDNSNames[8]}
-      - ${publicDNSNames[9]}
-      - ${publicDNSNames[10]}
-      - ${publicDNSNames[11]}
+      - ${mongoPublicDNS[0]}
+      - ${mongoPublicDNS[1]}
+      - ${mongoPublicDNS[2]}
+      - ${mongoPublicDNS[3]}
+      - ${mongoPublicDNS[4]}
+      - ${mongoPublicDNS[5]}
+      - ${mongoPublicDNS[6]}
+      - ${mongoPublicDNS[7]}
+      - ${mongoPublicDNS[8]}
   aws_ors_pool:
     login: $awsSSHUser
     hosts:
-      - ${publicDNSNames[12]}
-      - ${publicDNSNames[13]}
-      - ${publicDNSNames[14]}
-      - ${publicDNSNames[15]}
-      - ${publicDNSNames[16]}
-      - ${publicDNSNames[17]}
+      - ${poolPublicDNS[0]}
+      - ${poolPublicDNS[1]}
+      - ${poolPublicDNS[2]}
+      - ${poolPublicDNS[3]}
+      - ${poolPublicDNS[4]}
+      - ${poolPublicDNS[5]}
+      - ${poolPublicDNS[6]}
+      - ${poolPublicDNS[7]}
 EOF
 
 cp "$scriptsFolder/i2csshrc" ~/.i2csshrc
+
+tee "$scriptsFolder/00.drive.creation.sh" <<DRIVEC
+############################################################
+# Optional: Create drive mapping for /data 
+############################################################
+lsblk
+sudo mkfs.ext4 /dev/xvdb
+sudo mkdir -p /data
+sudo mount /dev/xvdb /data
+sudo chown -R $mongoUser:$mongoUser /data
+
+
+DRIVEC
 
 
 tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
@@ -158,9 +208,9 @@ tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
 # i2cssh -Xi=$awsPrivateKeyPath -c aws_ors_omgr
 
 # Double check the 3 server private name with below before you run these commands 
-# Server #1: ${privateDNSNames[0]}
-# Server #2: ${privateDNSNames[1]}
-# Server #3: ${privateDNSNames[2]}
+# Server #1: ${omgrPrivateDNS[0]}
+# Server #2: ${omgrPrivateDNS[1]}
+# Server #3: ${omgrPrivateDNS[2]}
 
 # Cmd + Shift + I
 # inject to run it via aws cli 
@@ -168,16 +218,17 @@ tee "$scriptsFolder/01.opsmgr.appdb.install.sh" <<INSOPSMGR
 if [ '$osFlavor' == 'rhel' ]
 then
 # In CentOS 7 $releasever is not being resolved properly to 7
-releasever=7
+# releasever=7
 sudo tee /etc/yum.repos.d/mongodb-enterprise.repo <<EOF
 [mongodb-enterprise]
 name=MongoDB Enterprise Repository
-baseurl=https://repo.mongodb.com/yum/redhat/\$releasever/mongodb-enterprise/3.4/\\\$basearch/
+baseurl=https://repo.mongodb.com/yum/redhat/\\\$releasever/mongodb-enterprise/3.4/\\\$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
 EOF
-else
+elif [ '$osFlavor' == 'amazon' ]
+then
 sudo tee /etc/yum.repos.d/mongodb-enterprise.repo <<EOF
 [mongodb-enterprise]
 name=MongoDB Enterprise Repository
@@ -186,90 +237,129 @@ gpgcheck=1
 enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-3.4.asc
 EOF
+else
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
+echo "deb [ arch=amd64,arm64,ppc64el,s390x ] http://repo.mongodb.com/apt/ubuntu xenial/mongodb-enterprise/3.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-enterprise.list
+
 fi
 
-
-# Without yum -y upgrade , there is enterprise lib*.so dependency failures I have come across while automating on AMZL 
+# Without yum -y upgrade , there is enterprise lib*.so dependency failures I have come across while automating on amazon_linux 
+if [ '$osFlavor' == 'ubuntu' ]
+sudo apt-get update
+sudo apt-get install -y mongodb-enterprise
+else
 sudo yum -y upgrade 
 sudo yum install -y mongodb-enterprise
-sudo mkdir -p $dataFolder/appdb/db
-sudo chown -R mongod:mongod $dataFolder
+fi
 
-sudo -u mongod tee $dataFolder/appdb/mongod.conf  <<EOF 
+sudo mkdir -p $dataFolder/db
+sudo chown -R $mongoUser:$mongoUser $dataFolder
+sudo rm -rf /var/lib/mongodb
+sudo ln -s /data/db /var/lib/mongodb
+sudo touch /var/run/mongod.pid
+sudo touch /var/run/mongod-oplogstore.pid
+sudo chown $mongoUser:$mongoUser /var/run/mongod.pid
+sudo chown $mongoUser:$mongoUser /var/run/mongod-oplogstore.pid
+sudo chown -R $mongoUser:$mongoUser /var/lib/mongodb
+
+# Ubuntu didn't work 
+#     with -u ; just run without  -u $mongoUser
+#     initially disabling security before we add user, then later enable it 
+# sudo -u $mongoUser tee /etc/mongod.conf  <<EOF 
+# sudo tee /etc/mongod.conf  <<EOF 
+
+sudo tee /etc/mongod.conf  <<EOF 
 systemLog:
    destination: file
-   path: $dataFolder/appdb/mongod.log
+   path: /var/log/mongodb/mongod.log
    logAppend: true
+   logRotate: reopen
 storage:
-   dbPath: $dataFolder/appdb/db
+   dbPath: $dataFolder/db
 processManagement:
-   fork: true
-   pidFilePath: $dataFolder/appdb/mongod-appdb.pid
+   pidFilePath: /var/run/mongod.pid
+   fork: $isForkable
 net:
    port: $appDBPort
 replication:
    replSetName: $rsAppDBName
-security:
-   authorization: enabled
-   keyFile: $dataFolder/appdb/keyfile
+#security:
+#   authorization: enabled
+#   keyFile: $dataFolder/keyfile
 EOF
 
-sudo -u mongod sh -c "echo $rsAppDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/appdb/keyfile"
+sudo -u $mongoUser sh -c "echo $rsAppDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/keyfile"
 sleep 1
-sudo -u mongod sh -c 'chmod 400 $dataFolder/appdb/keyfile'
-sudo -u mongod /usr/bin/mongod --config $dataFolder/appdb/mongod.conf 
+sudo -u $mongoUser sh -c 'chmod 400 $dataFolder/keyfile'
+# sudo -u $mongoUser /usr/bin/mongod --config /etc/mongod.conf 
+# sudo service mongod start
+# Run the 06.init.d here , then start 
+
 sleep 2
 INSOPSMGR
+
 
 
 tee "$scriptsFolder/02.opsmgr.appdb.configrs.sh" <<CONFAPPDB
 ############################################################
 # Ops Manager DB: Configure MongoDB ReplicaSet
-# Run only on Server #1: ${privateDNSNames[0]}
+# Run only on Server #1: ${omgrPrivateDNS[0]}
 ############################################################
 
 mongo --port $appDBPort <<EOF
 use admin
-rs.initiate({_id: '$rsAppDBName', 'members' : [{ '_id' : 0, 'host' : '${privateDNSNames[0]}:$appDBPort', priority: 5 }]})
+rs.initiate({_id: '$rsAppDBName', 'members' : [{ '_id' : 0, 'host' : '${omgrPrivateDNS[0]}:$appDBPort', priority: 5 }]})
 sleep(10000)
 db.createUser({user: '$rsAppDBUser', pwd: '$rsAppDBPassword', roles: [$rsAppDBRoles]})
 db.auth('$rsAppDBUser', '$rsAppDBPassword')
-rs.add({ host: '${privateDNSNames[1]}:$appDBPort' })
-rs.add({ host: '${privateDNSNames[2]}:$appDBPort' })
+rs.add({ host: '${omgrPrivateDNS[1]}:$appDBPort' })
+rs.$addOther({ host: '${omgrPrivateDNS[2]}:$appDBPort' })
 EOF
 CONFAPPDB
-
 
 tee "$scriptsFolder/03.opsmgr.oplogdb.install.sh" <<INITDAPPDB
 ############################################################
 # Backup DB: Installing the MongoDB
 ############################################################
-sudo mkdir -p $dataFolder/oplogstore/db
-sudo chown mongod:mongod -R $dataFolder
+sudo mkdir -p $dataFolder/oplogstore
+sudo chown $mongoUser:$mongoUser -R $dataFolder
 
-sudo -u mongod tee $dataFolder/oplogstore/mongod.conf  <<EOF
+# Ubuntu didn't work 
+#     with -u ; just run without  -u $mongoUser
+#     initially disabling security before we add user, then later enable it 
+# sudo -u $mongoUser tee /etc/mongod.conf  <<EOF 
+# sudo tee /etc/mongod.conf  <<EOF 
+
+sudo tee /etc/mongod-oplogstore.conf  <<EOF
 systemLog:
    destination: file
-   path: $dataFolder/oplogstore/mongod.log
+   path: /var/log/mongodb/mongod-oplogstore.log
    logAppend: true
+   logRotate: reopen
 storage:
-   dbPath: $dataFolder/oplogstore/db
+   dbPath: $dataFolder/oplogstore
 processManagement:
-   fork: true
-   pidFilePath: $dataFolder/oplogstore/mongod-oplogstore.pid
+   pidFilePath: /var/run/mongod-oplogstore.pid
+   fork: $isForkable
 net:
    port: $oplogDBPort
 replication:
    replSetName: $rsOplogStoreName
-security:
-   authorization: enabled
-   keyFile: $dataFolder/oplogstore/keyfile
+#security:
+#   authorization: enabled
+#   keyFile: $dataFolder/oplogstore/keyfile
 EOF
 
-sudo -u mongod sh -c "echo $rsOplogDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/oplogstore/keyfile"
+sudo -u $mongoUser sh -c "echo $rsOplogDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/oplogstore/keyfile"
 sleep 1
-sudo -u mongod sh -c 'chmod 400 $dataFolder/oplogstore/keyfile'
-sudo -u mongod /usr/bin/mongod --config $dataFolder/oplogstore/mongod.conf 
+sudo -u $mongoUser sh -c 'chmod 400 $dataFolder/oplogstore/keyfile'
+# sudo -u $mongoUser /usr/bin/mongod --config /etc/mongod-oplogstore.conf
+# TODO: Ideally I want the start service right here  
+
+
+
+
+sudo service mongod-oplogstore start
 sleep 2
 INITDAPPDB
 
@@ -277,18 +367,18 @@ INITDAPPDB
 tee "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" <<CONFOPLOGDB
 ############################################################
 # Backup DB: Configure MongoDB ReplicaSet
-# Run only on Server #2: ${privateDNSNames[1]}
+# Run only on Server #1: ${omgrPrivateDNS[0]}
 ############################################################
 
 mongo --port $oplogDBPort <<EOF
 use admin
-rs.initiate({_id: '$rsOplogStoreName', 'members' : [{ '_id' : 0, 'host' : '${privateDNSNames[0]}:$oplogDBPort'}]})
+rs.initiate({_id: '$rsOplogStoreName', 'members' : [{ '_id' : 0, 'host' : '${omgrPrivateDNS[0]}:$oplogDBPort'}]})
 sleep(10000)
 db.createUser({user: '$rsOplogDBUser', pwd: '$rsOplogDBPassword', roles: [$rsOplogDBRoles]})
 db.auth('$rsOplogDBUser', '$rsOplogDBPassword')
 
-rs.add({ host: '${privateDNSNames[1]}:$oplogDBPort', priority: 5 })
-rs.add({ host: '${privateDNSNames[2]}:$oplogDBPort' })
+rs.add({ host: '${omgrPrivateDNS[1]}:$oplogDBPort', priority: 5 })
+rs.add({ host: '${omgrPrivateDNS[2]}:$oplogDBPort' })
 sleep(3000)
 EOF
 CONFOPLOGDB
@@ -297,9 +387,10 @@ CONFOPLOGDB
 tee "$scriptsFolder/05.opsmgr.appdb.initd.sh" <<INITDAPPDB
 ############################################################
 # Ops Manager DB: Create the init.d startup scripts 
+# TODO: You might not need this anymore except for the suselinux stuff
 ############################################################
 
-sudo chown -R mongod:mongod $dataFolder
+sudo chown -R $mongoUser:$mongoUser $dataFolder
 
 if [ '$osFlavor' == 'rhel' ]
 then
@@ -352,13 +443,25 @@ sudo chcon -v --user=system_u --type=mongod_unit_file_t /lib/systemd/system/mong
 sudo systemctl enable mongod-oplogstore.service 
 sudo systemctl start mongod-oplogstore.service 
 
-else
+elif [ '$osFlavor' == 'amazon' ]
+then
 # Amazon Linux init.d scripts works. Delete /data/oplogstore/mongod.pid file if it doesnt 
 sed 's#/etc/mongod.conf#$dataFolder/oplogstore/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-oplogstore
 sudo chmod +x /etc/init.d/mongod-oplogstore
 sudo chkconfig --add mongod-oplogstore
 sudo chkconfig mongod-oplogstore on
 sudo service mongod-oplogstore restart
+
+else 
+sudo curl https://github.com/mongodb/mongo/blob/master/debian/mongod.service --output /tmp/mongod-oplogstore.service
+
+cat /lib/systemd/system/mongod.service | \
+    sed 's#mongod.conf#mongod-oplogstore.conf#g' | \
+    sudo tee /lib/systemd/system/mongod-oplogstore.service
+
+sudo systemctl enable mongod-oplogstore.service 
+sudo systemctl start mongod-oplogstore.service 
+sudo service mongod-oplogstore start 
 fi
 
 INITDOPLOGDB
@@ -386,8 +489,8 @@ INITDCLEANUP
 tee "$scriptsFolder/07.opsmgr.install.http.sh" <<INSHTTP
 ############################################################
 # Ops Manager: Install HTTP Service
-# Server #1: ${privateDNSNames[0]}
-# Server #3: ${privateDNSNames[2]}
+# Server #1: ${omgrPrivateDNS[0]}
+# Server #3: ${omgrPrivateDNS[2]}
 # https://docs.opsmanager.mongodb.com/current/tutorial/install-on-prem-with-rpm-packages/
 ############################################################
 if [ '$osFlavor' == 'rhel' ]
@@ -402,7 +505,7 @@ sudo rpm -ivh mongodb-mms-3.4.1.385-1.x86_64.rpm
 # Goto this line and replace connection string 
 # mongo.mongoUri=mongodb://127.0.0.1:27017/?maxPoolSize=150
 
-cat /opt/mongodb/mms/conf/conf-mms.properties | sed 's#mongoUri=.*\$#mongoUri=mongodb://$rsAppDBUser:$rsAppDBPassword@${privateDNSNames[0]}:$appDBPort,${privateDNSNames[1]}:$appDBPort,${privateDNSNames[2]}:$appDBPort/?authSource=admin\&replicaSet=$rsAppDBName\&maxPoolSize=150#g' | sudo tee /opt/mongodb/mms/conf/conf-mms.properties
+cat /opt/mongodb/mms/conf/conf-mms.properties | sed 's#mongoUri=.*\$#mongoUri=mongodb://$rsAppDBUser:$rsAppDBPassword@${omgrPrivateDNS[0]}:$appDBPort,${omgrPrivateDNS[1]}:$appDBPort,${omgrPrivateDNS[2]}:$appDBPort/?authSource=admin\&replicaSet=$rsAppDBName\&maxPoolSize=150#g' | sudo tee /opt/mongodb/mms/conf/conf-mms.properties
 
 INSHTTP
 
@@ -410,12 +513,12 @@ INSHTTP
 tee "$scriptsFolder/08.opsmgr.start.http.sh" <<STARTHTTP
 ############################################################
 # Ops Manager: Start only one of the Server #1
-# Server #1: ${publicDNSNames[0]} / ${privateDNSNames[0]}
+# Server #1: ${omgrPublicDNS[0]} / ${omgrPrivateDNS[0]}
 # Notes: Will take 5 mins. 
 ############################################################
 
 # Upload the aws private key to the amazon instance 
-# scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
+# scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser
 
 sudo service mongodb-mms start
 
@@ -425,16 +528,17 @@ tee "$scriptsFolder/09.opsmgr.config.http.sh" <<CONFIGHTTP
 ############################################################
 # Ops Manager: Conigure the Ops Manager via UI
 ############################################################
-# http://${publicDNSNames[0]}:8080
-# http://${privateDNSNames[0]}:8080
+# http://${omgrPublicDNS[0]}:8080
+# http://${omgrPrivateDNS[0]}:8080
 # shyam.arjarapu@10gen.com ORS smtp.gmail.com
 
 ############################################################
 # Ops Manager: Copy /etc/mongodb-mms/gen.key from Server #1 to #3
 # Copy gen.key, start mms, create backup deamon folder
 ############################################################
-sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDNSNames[2]}:/home/$awsSSHUser
-sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${privateDNSNames[1]}:/home/$awsSSHUser
+sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${omgrPrivateDNS[2]}:/home/$awsSSHUser
+# Run one by one accept the fingerprint before running beloe 
+sudo scp -i $awsPrivateKeyName /etc/mongodb-mms/gen.key  $awsSSHUser@${omgrPrivateDNS[1]}:/home/$awsSSHUser
 
 
 ############################################################
@@ -457,7 +561,7 @@ sudo chown mongodb-mms:mongodb-mms /backup /backup/fileSystemStore
 
 ############################################################
 # Backup Daemon: On Server #3 create headdb folder
-# Server #3: ${privateDNSNames[2]}
+# Server #3: ${omgrPrivateDNS[2]}
 # Double check from UI
 ############################################################
 sudo mkdir -p /backup/headdb
@@ -468,7 +572,7 @@ sudo chown mongodb-mms:mongodb-mms /backup /backup/headdb
 # enable daemon
 # /backup/fileSystemStore
 
-# servers: ${privateDNSNames[0]}:$oplogDBPort,${privateDNSNames[1]}:$oplogDBPort,${privateDNSNames[2]}:$oplogDBPort
+# servers: ${omgrPrivateDNS[0]}:$oplogDBPort,${omgrPrivateDNS[1]}:$oplogDBPort,${omgrPrivateDNS[2]}:$oplogDBPort
 # user: $rsOplogDBUser
 # password: $rsOplogDBPassword
 # options: authSource=admin&replicaSet=$rsOplogStoreName&maxPoolSize=150
@@ -485,7 +589,7 @@ tee "$scriptsFolder/11.opsmgr.install.agents.sh" <<INSAGENTS
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
 sudo yum -y upgrade 
 
-opsmgrUri=${publicDNSNames[0]}
+opsmgrUri=${omgrPublicDNS[0]}
 rpmVersion=3.2.8.1942-1.x86_64
 mmsGroupId=58a11019d0f6c8231193df72
 mmsApiKey=be6793ccfb0a74b2b239650fa788367f
@@ -499,11 +603,11 @@ sudo sed "s/mmsGroupId=.*\$/mmsGroupId=\$mmsGroupId/g" /etc/mongodb-mms/automati
     sed "s/mmsApiKey=.*\$/mmsApiKey=\$mmsApiKey/g" | \
     sed "s/mmsBaseUrl=.*\$/mmsBaseUrl=http:\/\/\$opsmgrUri:8080/g" | \
     tee /tmp/automation-agent.config
-sudo -u mongod cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
+sudo -u $mongoUser cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config
 
 sudo mkdir -p $dataFolder
-sudo chown mongod:mongod $dataFolder
+sudo chown $mongoUser:$mongoUser $dataFolder
 sudo service mongodb-mms-automation-agent start
 INSAGENTS
 
@@ -513,7 +617,7 @@ tee "$scriptsFolder/12.opsmgr.install.pool.sh" <<INSPOOL
 # Pool: Install Automation Agents
 ###############################################################
 
-opsmgrUri=${publicDNSNames[0]}
+opsmgrUri=${omgrPublicDNS[0]}
 rpmVersion=3.2.8.1942-1.x86_64
 serverPoolKey=4e324700df392529b115cb2b992efb14
 mmsApiKey=3136703d14c1919ee176180c2b5d7157
@@ -528,27 +632,27 @@ sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.conf
 sudo sed 's/serverPoolKey=/serverPoolKey=$serverPoolKey/g' /etc/mongodb-mms/automation-agent.config | \
     sed 's/mmsBaseUrl=/mmsBaseUrl=http:\/\/$opsmgrUri:8080/g' | \
     tee /tmp/automation-agent.config
-sudo -u mongod cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
+sudo -u $mongoUser cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config
 
 
 # 1 MEDIUM across US-EAST, US-CENTRAL, US-WEST
 # 3 LARGE across US-EAST
 # Stopped: 1 Large instance
-sudo -u mongod tee /etc/mongodb-mms/server-pool.properties <<EOF 
+sudo -u $mongoUser tee /etc/mongodb-mms/server-pool.properties <<EOF 
 Datacenter=US-EAST
 Size=MEDIUM
 EOF
 
-sudo -u mongod tee /etc/mongodb-mms/server-pool.properties <<EOF 
+sudo -u $mongoUser tee /etc/mongodb-mms/server-pool.properties <<EOF 
 Datacenter=US-EAST
 Size=LARGE
 EOF
 
-sudo -u mongod vi /etc/mongodb-mms/server-pool.properties 
+sudo -u $mongoUser vi /etc/mongodb-mms/server-pool.properties 
 
 sudo mkdir -p $dataFolder
-sudo chown mongod:mongod $dataFolder
+sudo chown $mongoUser:$mongoUser $dataFolder
 sudo service mongodb-mms-automation-agent start
 
 # regex  ip-172-31-13-163|ip-172-31-6-73|ip-172-31-8-94
@@ -577,7 +681,7 @@ for(var i = 20000; i < 30000; i ++) {
 EOF
 
 
-cat "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
+cat "$scriptsFolder/00.drive.creation.sh" "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
 cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
 cat "$scriptsFolder/05.opsmgr.appdb.initd.sh" "$scriptsFolder/06.opsmgr.oplogdb.initd.sh" > "$scriptsFolder/99.03.opsmgr.appdb.oplogdb.initd.sh" 
 
@@ -637,9 +741,9 @@ createCertificate \$caCertsPath \$caPassword \$serverPath \$serverPassword \$ser
 sleep 2
 
 
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser"
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${publicDNSNames[1]}:/home/$awsSSHUser"
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${publicDNSNames[2]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${omgrPublicDNS[1]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${omgrPublicDNS[2]}:/home/$awsSSHUser"
 
 echo "sudo mv $serverName.pem /etc/security/opsmanager.pem"
 echo "X-Forwarded-For"
@@ -666,7 +770,7 @@ sudo yum install -y mongodb-org-2.6.8
 
 
 sudo mkdir -p $dataFolder/db
-sudo chown mongod:mongod $dataFolder $dataFolder/db
+sudo chown $mongoUser:$mongoUser $dataFolder $dataFolder/db
 
 sudo tee /etc/mongod.conf  <<EOF 
 logpath=$dataFolder/mongod.log
@@ -678,11 +782,11 @@ pidfilepath=$dataFolder/mongod.pid
 replSet=progresoReplSet
 keyFile=$dataFolder/keyfile
 EOF
-sudo chown mongod:mongod /etc/mongod.conf
+sudo chown $mongoUser:$mongoUser /etc/mongod.conf
 
-sudo -u mongod sh -c 'echo $rsAppDBPasswordsaltprogresoReplSet | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/keyfile'
-sudo -u mongod sh -c 'chmod 400 $dataFolder/keyfile'
-sudo -u mongod /usr/bin/mongod --config /etc/mongod.conf 
+sudo -u $mongoUser sh -c 'echo $rsAppDBPasswordsaltprogresoReplSet | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/keyfile'
+sudo -u $mongoUser sh -c 'chmod 400 $dataFolder/keyfile'
+sudo -u $mongoUser /usr/bin/mongod --config /etc/mongod.conf 
 sleep 2
 
 # ip-172-31-7-71.us-west-2.compute.internal
@@ -800,7 +904,7 @@ sudo cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config
 
 sudo mkdir -p $dataFolder
-sudo chown mongod:mongod $dataFolder
+sudo chown $mongoUser:$mongoUser $dataFolder
 sudo service mongodb-mms-automation-agent start
 
 
@@ -918,12 +1022,12 @@ sudo fdisk -l
 mongo --port 27017 --eval 'rs.status()'
 mongo --port 27017 --eval 'db.getSiblingDB('BirstDB').stats()'
 mongo --port 27017 --eval 'db.serverStatus()'
-sudo -u mongod sh -c 'ulimit -a'
+sudo -u $mongoUser sh -c 'ulimit -a'
 numactl --hardware
 sysctl net.ipv4.tcp_keepalive_time
 sudo sysctl vm.zone_reclaim_mode
 
-# can you run it on the device where your mongod is installing 
+# can you run it on the device where your $mongoUser is installing 
 # sudo blockdev --getra /dev/xvda
 
 
@@ -932,14 +1036,14 @@ sudo mv /etc/rc.d/init.d/mongod /etc/rc.d/init.d/mongod-appdb
 sudo cp /etc/rc.d/init.d/mongod-appdb /etc/rc.d/init.d/mongod-oplogstore
 
 
-sudo -u mongod sh -c 'sed -i  's#/etc/mongod.conf#$dataFolder/appdb/mongod.conf#g' /etc/rc.d/init.d/mongod-appdb'
-sudo -u mongod sed -i  's#/etc/mongod.conf#$dataFolder/oplogstore/mongod.conf#g' /etc/rc.d/init.d/mongod-oplogstore
+sudo -u $mongoUser sh -c 'sed -i  's#/etc/mongod.conf#$dataFolder/appdb/mongod.conf#g' /etc/rc.d/init.d/mongod-appdb'
+sudo -u $mongoUser sed -i  's#/etc/mongod.conf#$dataFolder/oplogstore/mongod.conf#g' /etc/rc.d/init.d/mongod-oplogstore
 
-sudo chown mongod -R $dataFolder
-sudo chown mongod -R  /var/log/mongodb-mms-automation
-sudo chown mongod -R  /var/lib/mongodb-mms-automation
+sudo chown $mongoUser -R $dataFolder
+sudo chown $mongoUser -R  /var/log/mongodb-mms-automation
+sudo chown $mongoUser -R  /var/lib/mongodb-mms-automation
 
-nohup sudo -u mongod ./mongodb-mms-automation-agent --config=local.config >> /var/log/mongodb-mms-automation/automation-agent.log 2>&1 &
+nohup sudo -u $mongoUser ./mongodb-mms-automation-agent --config=local.config >> /var/log/mongodb-mms-automation/automation-agent.log 2>&1 &
 
 
 ========================
@@ -972,8 +1076,32 @@ wget -O /etc/init.d/disable-transparent-hugepages http://git.io/vlHzS
 sudo chmod 755 /etc/init.d/disable-transparent-hugepages
 chkconfig disable-transparent-hugepages on
 
+
+# Removing 
+# sudo update-rc.d -f mongod-oplogstore remove
+# sudo rm /etc/init.d/mongod-oplogstore
+# sudo service --status-all | grep mongo
+# sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/debian/init.d --output /tmp/mongod-oplogstore.initd
+sudo curl https://github.com/mongodb/mongo/blob/master/debian/mongod.service --output /tmp/mongod-oplogstore.service
+
+sudo cat /tmp/mongod-oplogstore.service | \
+    sed 's#CONF=/etc/mongod.conf#CONF=/etc/mongod-oplogstore.conf#g' | \
+    sed 's#NAME=mongod#NAME=mongod-oplogstore#g' | \
+    sed 's/# Provides:          mongod/# Provides:          mongod-oplogstore/g' | \
+    sudo tee /etc/init.d/mongod-oplogstore
+
+cat /lib/systemd/system/mongod.service | \
+    sed 's#mongod.conf#mongod-oplogstore.conf#g' | \
+    sudo tee /lib/systemd/system/mongod-oplogstore.service
+
+
+sudo chmod 755 /etc/init.d/mongod-oplogstore
+sudo update-rc.d mongod-oplogstore defaults
+# systemctl status mongod-oplogstore.service
+
+
 OTHER
 
-# scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${publicDNSNames[0]}:/home/$awsSSHUser
+# scp -i $awsPrivateKeyPath $awsPrivateKeyPath  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser
 
 
