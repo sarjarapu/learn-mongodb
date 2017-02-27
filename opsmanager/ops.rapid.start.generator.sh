@@ -7,7 +7,7 @@
 # Tools:
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
 # Notes: 
-#   Amazon: m4.2xlarge, 16+60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
+#   Amazon: m3.2xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
 #   Total WTC: 5% = 3 GB. (Backups require oplog window > 24 hrs) 
 #     or Replication  Window < 0.128 GB / hour
 #   If init.d scripts aren't starting the process delete /data/appdb/mongod.pid 
@@ -22,7 +22,20 @@
 
 ############################################################
 
-awsInstanceTagName='ska-ors'
+############################################################
+# Install a Basic Production Deployment on RHEL or Amazon Linux
+# https://docs.opsmanager.mongodb.com/v3.4/tutorial/install-basic-deployment/
+############################################################
+
+# Setup: 
+# Servers:  server-1      server-2       server-3
+#   AppDB:  primary       secondary      sec / arb
+#  OplgDB:  sec / arb     secondary      primary
+#  OpsWeb:  http        
+#  Daemon:                BackupD
+# File SS:  mount 
+
+awsInstanceTagName='ska-ors2'
 # expects to have images ska-ors-omgr, ska-ors-mongo and ska-ors-pool
 osFlavor='ubuntu' # amazon_linux rhel ubuntu
 awsSSHUser='ec2-user'
@@ -141,18 +154,6 @@ printf '%s\\n' "\${mongoInstanceIds[@]}"
 " > "$scriptsFolder/machines.info.txt"
 
 
-############################################################
-# Install a Basic Production Deployment on RHEL or Amazon Linux
-# https://docs.opsmanager.mongodb.com/v3.4/tutorial/install-basic-deployment/
-############################################################
-
-# Setup: 
-# Servers:  server-1      server-2       server-3
-#   AppDB:  primary       secondary      sec / arb
-#  OplgDB:  sec / arb     secondary      primary
-#  OpsWeb:  http        
-#  Daemon:                BackupD
-# File SS:  mount 
 ############################################################
 # Update your i2csshrc with instance public IPs  
 ############################################################
@@ -334,7 +335,8 @@ sleep(10000)
 db.createUser({user: '$rsAppDBUser', pwd: '$rsAppDBPassword', roles: [$rsAppDBRoles]})
 db.auth('$rsAppDBUser', '$rsAppDBPassword')
 rs.add({ host: '${omgrPrivateDNS[1]}:$appDBPort' })
-rs.$addOther({ host: '${omgrPrivateDNS[2]}:$appDBPort' })
+//rs.add({ host: '${omgrPrivateDNS[2]}:$appDBPort' })
+rs.$addOther('${omgrPrivateDNS[2]}:$appDBPort')
 EOF
 CONFAPPDB
 
@@ -388,21 +390,25 @@ INITDAPPDB
 tee "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" <<CONFOPLOGDB
 ############################################################
 # Backup DB: Configure MongoDB ReplicaSet
-# Run only on Server #1: ${omgrPrivateDNS[0]}
+# Run only on Server #3: ${omgrPrivateDNS[2]}
 ############################################################
 
 mongo --port $oplogDBPort <<EOF
 use admin
-rs.initiate({_id: '$rsOplogStoreName', 'members' : [{ '_id' : 0, 'host' : '${omgrPrivateDNS[0]}:$oplogDBPort'}]})
+rs.initiate({_id: '$rsOplogStoreName', 'members' : [{ '_id' : 0, 'host' : '${omgrPrivateDNS[2]}:$oplogDBPort', priority: 5 }]})
 sleep(10000)
 db.createUser({user: '$rsOplogDBUser', pwd: '$rsOplogDBPassword', roles: [$rsOplogDBRoles]})
 db.auth('$rsOplogDBUser', '$rsOplogDBPassword')
 
-rs.add({ host: '${omgrPrivateDNS[1]}:$oplogDBPort', priority: 5 })
-rs.add({ host: '${omgrPrivateDNS[2]}:$oplogDBPort' })
+rs.add({ host: '${omgrPrivateDNS[1]}:$oplogDBPort'})
+//rs.add({ host: '${omgrPrivateDNS[0]}:$oplogDBPort' })
+rs.$addOther('${omgrPrivateDNS[0]}:$oplogDBPort')
 sleep(3000)
 EOF
 CONFOPLOGDB
+
+
+
 
 
 tee "$scriptsFolder/05.opsmgr.appdb.initd.sh" <<INITDAPPDB
@@ -431,13 +437,35 @@ sudo chcon -v --user=system_u --type=mongod_unit_file_t /lib/systemd/system/mong
 sudo systemctl enable mongod-appdb.service 
 sudo systemctl start mongod-appdb.service 
 
-else
+elif [ '$osFlavor' == 'amazon' ]
+then
 # Amazon Linux init.d scripts works. Delete /data/appdata/mongod.pid file if it doesnt 
 sed 's#/etc/mongod.conf#$dataFolder/appdb/mongod.conf#g' /etc/init.d/mongod | sudo tee /etc/init.d/mongod-appdb
 sudo chmod +x /etc/init.d/mongod-appdb
 sudo chkconfig --add mongod-appdb
 sudo chkconfig mongod-appdb on
 sudo service mongod-appdb restart
+
+else 
+
+# TODO: Figure out a way to inject it but for now move on with manual injection
+# Edit sudo vi /lib/systemd/system/mongod.service
+ExecStartPre=/usr/bin/mkdir -p /var/run/mongodb
+ExecStartPre=/usr/bin/touch /var/run/mongodb/mongod.pid
+ExecStartPre=/usr/bin/chown -R mongod:mongod /var/run/mongodb
+ExecStartPre=/usr/bin/chmod 0755 /var/run/mongodb
+PermissionsStartOnly=true
+PIDFile=/var/run/mongodb/mongod.pid
+
+sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/debian/init.d --output /etc/init.d/mongod
+sudo chmod +x /etc/init.d/mongod
+
+cat /lib/systemd/system/mongod.service | \
+    sed 's/# file size/$execPreStart# file size/g' | \
+    sudo tee /lib/systemd/system/mongod-oplogstore.service
+
+sudo systemctl enable mongod.service 
+sudo service mongod start 
 fi
 
 INITDAPPDB
@@ -474,10 +502,10 @@ sudo chkconfig mongod-oplogstore on
 sudo service mongod-oplogstore restart
 
 else 
-sudo curl https://github.com/mongodb/mongo/blob/master/debian/mongod.service --output /tmp/mongod-oplogstore.service
+# sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/debian/mongod.service --output /tmp/mongod-oplogstore.service
 
 cat /lib/systemd/system/mongod.service | \
-    sed 's#mongod.conf#mongod-oplogstore.conf#g' | \
+    sed 's#mongod\.#mongod-oplogstore.#g' | \
     sudo tee /lib/systemd/system/mongod-oplogstore.service
 
 sudo systemctl enable mongod-oplogstore.service 
@@ -512,14 +540,24 @@ tee "$scriptsFolder/07.opsmgr.install.http.sh" <<INSHTTP
 # Server #1: ${omgrPrivateDNS[0]}
 # Server #3: ${omgrPrivateDNS[2]}
 # https://docs.opsmanager.mongodb.com/current/tutorial/install-on-prem-with-rpm-packages/
+# Get the version links from here https://www.mongodb.com/subscription/downloads/ops-manager
 ############################################################
 if [ '$osFlavor' == 'rhel' ]
 then
 sudo yum install -y wget
+wget https://downloads.mongodb.com/on-prem-mms/rpm/mongodb-mms-3.4.3.402-1.x86_64.rpm
+sudo rpm -ivh mongodb-mms-3.4.3.402-1.x86_64.rpm
+
+elif [ '$osFlavor' == 'amazon' ]
+then
+wget https://downloads.mongodb.com/on-prem-mms/rpm/mongodb-mms-3.4.3.402-1.x86_64.rpm
+sudo rpm -ivh mongodb-mms-3.4.3.402-1.x86_64.rpm
+else 
+wget https://downloads.mongodb.com/on-prem-mms/deb/mongodb-mms_3.4.3.402-1_x86_64.deb
+sudo dpkg --install mongodb-mms_3.4.3.402-1_x86_64.deb
+# update-rc.d: warning: start and stop actions are no longer supported; falling back to defaults
 fi
 
-wget https://downloads.mongodb.com/on-prem-mms/rpm/mongodb-mms-3.4.1.385-1.x86_64.rpm
-sudo rpm -ivh mongodb-mms-3.4.1.385-1.x86_64.rpm
 # sudo vi /opt/mongodb/mms/conf/conf-mms.properties
 
 # Goto this line and replace connection string 
@@ -580,8 +618,8 @@ sudo chown mongodb-mms:mongodb-mms /backup /backup/fileSystemStore
 
 
 ############################################################
-# Backup Daemon: On Server #3 create headdb folder
-# Server #3: ${omgrPrivateDNS[2]}
+# Backup Daemon: On Server #2 create headdb folder
+# Server #3: ${omgrPrivateDNS[1]}
 # Double check from UI
 ############################################################
 sudo mkdir -p /backup/headdb
@@ -607,16 +645,31 @@ tee "$scriptsFolder/11.opsmgr.install.agents.sh" <<INSAGENTS
 # Install Automation Agents
 ###############################################################
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
+
+
+if [ '$osFlavor' == 'ubuntu' ]
+then
+sudo apt-get update
+binaryVersionWithExt='_3.2.10.1997-1_amd64.ubuntu1604.deb'
+else
 sudo yum -y upgrade 
+binaryVersionWithExt='-3.2.10.1997-1.x86_64.rpm'
+fi
 
 opsmgrUri=${omgrPublicDNS[0]}
-rpmVersion=3.2.8.1942-1.x86_64
 mmsGroupId=58a11019d0f6c8231193df72
 mmsApiKey=be6793ccfb0a74b2b239650fa788367f
 
 
-curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager-\$rpmVersion.rpm
-sudo rpm -U mongodb-mms-automation-agent-manager-\$rpmVersion.rpm
+curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+
+if [ '$osFlavor' == 'ubuntu' ]
+then
+sudo dpkg -i mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+else
+sudo rpm -U mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+fi
+
 
 sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.config
 sudo sed "s/mmsGroupId=.*\$/mmsGroupId=\$mmsGroupId/g" /etc/mongodb-mms/automation-agent.config | \
@@ -637,16 +690,33 @@ tee "$scriptsFolder/12.opsmgr.install.pool.sh" <<INSPOOL
 # Pool: Install Automation Agents
 ###############################################################
 
+
+if [ '$osFlavor' == 'ubuntu' ]
+then
+sudo apt-get update
+binaryVersionWithExt='_3.2.10.1997-1_amd64.ubuntu1604.deb'
+else
+sudo yum -y upgrade 
+binaryVersionWithExt='-3.2.10.1997-1.x86_64.rpm'
+fi
+
 opsmgrUri=${omgrPublicDNS[0]}
-rpmVersion=3.2.8.1942-1.x86_64
 serverPoolKey=4e324700df392529b115cb2b992efb14
 mmsApiKey=3136703d14c1919ee176180c2b5d7157
 
-i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_pool
+# i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_pool
 sudo yum -y upgrade 
 
-curl -OL http://$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager-3.2.8.1942-1.x86_64.rpm
-sudo rpm -U mongodb-mms-automation-agent-manager-$rpmVersion.rpm
+
+curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+
+if [ '$osFlavor' == 'ubuntu' ]
+then
+sudo dpkg -i mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+else
+sudo rpm -U mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+fi
+
 
 sudo cp /etc/mongodb-mms/automation-agent.config /tmp/automation-agent.orig.config
 sudo sed 's/serverPoolKey=/serverPoolKey=$serverPoolKey/g' /etc/mongodb-mms/automation-agent.config | \
@@ -703,6 +773,7 @@ EOF
 
 cat "$scriptsFolder/00.drive.creation.sh" "$scriptsFolder/01.opsmgr.appdb.install.sh" "$scriptsFolder/03.opsmgr.oplogdb.install.sh" "$scriptsFolder/06.opsmgr.oplogdb.initd.sh"  > "$scriptsFolder/99.01.opsmgr.appdb.oplogdb.install.sh" 
 cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
+cat "$scriptsFolder/07.opsmgr.install.http.sh" "$scriptsFolder/08.opsmgr.start.http.sh" "$scriptsFolder/09.opsmgr.config.http.sh" "$scriptsFolder/10.opsmgr.config.backup.sh"  > "$scriptsFolder/99.03.opsmgr.configuration.sh" 
 
 
 tee "$scriptsFolder/90.opsmgr.certificates.sh" <<CERTS
@@ -768,6 +839,110 @@ echo "sudo mv $serverName.pem /etc/security/opsmanager.pem"
 echo "X-Forwarded-For"
 CERTS
 
+
+
+tee "$scriptsFolder/90.opsmgr.certificates2.sh" <<CERTS
+###############################################################
+# Create certificates required for Ops Manager demo 
+###############################################################
+
+# Generate the Certificate Authority
+caCertsPath='$scriptsFolder/certs'
+caPassword='secret_ca'
+caServerName='${omgrPublicDNS[0]}'
+
+# x509: certificate is valid for ip-172-31-2-53.us-west-2.compute.internal, not ec2-54-191-156-24.us-west-2.compute.amazonaws.com
+
+    
+# Generate the private root key file - this file should be kept secure:
+# openssl genrsa -out \$caCertsPath/rootCA.private.key 2048
+openssl genrsa -des3 -passout pass:\$caPassword -out \$caCertsPath/rootCA.private.key 4096
+# Generate the public root certificate - it is our CAFile that has to be distributed among the servers and clients so they could validate each other’s certificates
+# openssl req -x509 -new -nodes -key \$caCertsPath/rootCA.private.key -days 365 -out \$caCertsPath/rootCA.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Certification Authority/CN=\$caServerName"
+openssl req -x509 -new -days 365  -passin pass:\$caPassword -key \$caCertsPath/rootCA.private.key -out \$caCertsPath/rootCA.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Certification Authority/CN=\$caServerName"
+    
+
+
+
+createCertificate()
+{
+    # create Certificate 
+
+
+    serverName=\$1
+    serverRole=\$2
+    serverPassword=\3 
+
+    caCertsPath='$scriptsFolder/certs'
+
+    # Generate the private key file:
+    # openssl genrsa -out \$caCertsPath/omgr.\$serverName.private.key 4096 
+    openssl genrsa -des3 -passout pass:\$serverPassword -out \$caCertsPath/omgr.\$serverName.private.key 4096 
+
+    # Generate a Certificate Signing Request (CSR) Give the Common Name (CN) and other details. 
+    # It is important to ensure that the CN you specified matches the FQDN of the host the certificate should be used on 
+    # (in this case, the host that will be running the mongod process). Otherwise the certificate validation may fail.
+    # openssl req -new -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
+    openssl req -new -passin pass:\$serverPassword -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
+
+    # Use the CSR to create a certificate signed with our root certificate
+    # openssl x509 -req -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
+    openssl x509 -req -passin pass:\$caPassword -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
+
+
+    # Concatenate them into a single .pem file - that is the PEMKeyFile option that should be used to start the mongod process
+    cat \$caCertsPath/omgr.\$serverName.private.key \$caCertsPath/omgr.\$serverName.public.crt > \$caCertsPath/omgr.\$serverName.pem
+    # Verify that the .pem file can be validated with the root certificate that was used to sign it
+    openssl verify -CAfile \$caCertsPath/rootCA.public.crt \$caCertsPath/omgr.\$serverName.pem 
+    # That should return omgr.\$serverName.pem: OK
+
+}
+
+# createCertificate <FQDN> <role:omgr,client,member1,kmipMember1> <pem password>
+# Certificate: Ops Manager WebServer
+createCertificate '${omgrPublicDNS[0]}' 'omgr' secret_omgr'
+
+# Certificate: Ops Manager WebServer
+serverName='${omgrPublicDNS[0]}'
+serverPassword='secret_omgr'
+
+# Generate the private key file:
+# openssl genrsa -out \$caCertsPath/omgr.\$serverName.private.key 4096 
+openssl genrsa -des3 -passout pass:\$serverPassword -out \$caCertsPath/omgr.\$serverName.private.key 4096 
+
+# Generate a Certificate Signing Request (CSR) Give the Common Name (CN) and other details. 
+# It is important to ensure that the CN you specified matches the FQDN of the host the certificate should be used on 
+# (in this case, the host that will be running the mongod process). Otherwise the certificate validation may fail.
+# openssl req -new -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
+openssl req -new -passin pass:\$serverPassword -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
+
+# Use the CSR to create a certificate signed with our root certificate
+# openssl x509 -req -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
+openssl x509 -req -passin pass:\$caPassword -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
+
+
+# Concatenate them into a single .pem file - that is the PEMKeyFile option that should be used to start the mongod process
+cat \$caCertsPath/omgr.\$serverName.private.key \$caCertsPath/omgr.\$serverName.public.crt > \$caCertsPath/omgr.\$serverName.pem
+# Verify that the .pem file can be validated with the root certificate that was used to sign it
+openssl verify -CAfile \$caCertsPath/rootCA.public.crt \$caCertsPath/omgr.\$serverName.pem 
+# That should return omgr.\$serverName.pem: OK
+
+# openssl genrsa -des3 -passout pass:\$spassword -out \$scpath/\$sname.private.key 4096
+# openssl req -new -passin pass:\$spassword -key \$scpath/\$sname.private.key -out \$scpath/\$sname.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=\$orgunit/CN=\$sname"
+# openssl x509 -req -extfile \$cpath/extensions.conf -passin pass:\$cpass -days 365 -in \$scpath/\$sname.csr -CA \$cpath/rootca.public.crt -CAkey \$cpath/rootca.private.key -set_serial 01 -out \$scpath/\$sname.public.crt
+
+echo "openssl x509 -in client.pem -inform PEM -subject -nameopt RFC2253 -noout"
+eco "db.getSiblingDB('\$external').runCommand({createUser: "C=US,ST=Texas,L=Austin,O=MongoDB,OU=Database,CN=\$serverName", roles: [{role: 'root', db: 'admin'}]})"
+echo "Client Certificate Mode * ** "
+
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/omgr.\$serverName.pem  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.private.key  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.public.crt  $awsSSHUser@${omgrPublicDNS[2]}:/home/$awsSSHUser"
+
+echo "sudo mv omgr.\$serverName.pem /etc/security/opsmanager.pem"
+echo "X-Forwarded-For"
+
+CERTS
 
 
 tee "$scriptsFolder/90.opsmgr.do.other.sh" <<OTHER
