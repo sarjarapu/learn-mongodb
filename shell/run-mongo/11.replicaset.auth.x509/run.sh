@@ -1,136 +1,135 @@
-#!/bin/sh 
+curDir=`pwd`
+killall mongod
+sleep 1 
 
-# kill all existing mongod processes 
-echo "killing all mongod processes"
-killall mongod 
+rm -rf $curDir/* 
+mkdir -p rs{1,2,3}/db certs client
 
-
-sleep 3
-
-# clear all the existing directories
-echo "Clearing and recreating the server & config folders"
-rm -rf server{1,2,3} config
-
-# create the data directories for all 3 mongod instances 
-mkdir -p server{1,2,3}/data config
-
-createSubordinateCA()
-{
-      password=$1
-      machineName=$2
-      isCertAuth=$3
-      options=''
-      if $isCertAuth; then
-            options=' -x509 -days 3650 '
-      fi 
-
-
-      openssl genrsa -des3 -passout pass:$password -out ./config/$machineName.key 4096
-      openssl req -new `$options` -passin pass:$password -key ./config/$machineName.key -out ./config/$machineName.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=$machineName.arjarapu.net"
-      cat ./config/$machineName.key ./config/$machineName.crt > ./config/$machineName.pem
-}
-
-# worked from docs 
-# https://docs.mongodb.com/manual/tutorial/configure-ssl/
-openssl req -newkey rsa:2048 -new -x509 -days 365 -nodes -out mongodb-cert.crt -keyout mongodb-cert.key -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
-cat mongodb-cert.key mongodb-cert.crt > mongodb-cert.pem
-mongod  --sslMode requireSSL --sslPEMKeyFile mongodb.pem --dbpath ./data --logpath ./mongod.log --fork --port 22010 --sslAllowConnectionsWithoutCertificates
-mongo --ssl --sslCAFile mongodb.pem --host certauthority.arjarapu.net --port 22010
-
-
-# SSL: PEMKey + Password 
-# https://docs.mongodb.com/manual/tutorial/configure-ssl/
-openssl genrsa -des3 -passout pass:secretca -out certauthority.key 4096
-openssl req -new -x509 -days 3650 -passin pass:secretca -key certauthority.key -out certauthority.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
-cat certauthority.key certauthority.crt > certauthority.pem
-mongod  --sslMode requireSSL --sslPEMKeyFile certauthority.pem --sslPEMKeyPassword secretca --dbpath ./data --logpath ./mongod.log --fork --port 22010 --sslAllowConnectionsWithoutCertificates
-mongo --ssl --sslCAFile certauthority.pem --sslPEMKeyPassword secretca --host certauthority.arjarapu.net --port 22010
-
-
-# SSL: PEMKey + Password + CA File
-openssl genrsa -des3 -passout pass:secretca -out certauthority.key 4096
-openssl req -new -x509 -days 3650 -passin pass:secretca -key certauthority.key -out certauthority.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
-cat certauthority.key certauthority.crt > certauthority.pem
-
-openssl genrsa -des3 -passout pass:secretserver -out server.key 4096
-openssl req -new -passin pass:secretserver -key server.key -out server.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=server1.arjarapu.net"
-openssl x509 -req -passin pass:secretca -days 365 -in server.csr -CA certauthority.crt -CAkey certauthority.key -set_serial 01 -out server.crt
-cat server.key server.crt > server.pem
-
-openssl genrsa -des3 -passout pass:secretclient -out client.key 4096
-openssl req -new -passin pass:secretclient -key client.key -out client.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=client.arjarapu.net"
-openssl x509 -req -passin pass:secretca -days 365 -in client.csr -CA certauthority.crt -CAkey certauthority.key -set_serial 01 -out client.crt
-cat client.key client.crt > client.pem
-
-mongod  --sslMode requireSSL --sslPEMKeyFile server.pem --sslPEMKeyPassword secretserver --sslCAFile certauthority.pem --dbpath ./data --logpath ./mongod.log --fork --port 22010
-mongo --ssl --sslPEMKeyFile client.pem --sslCAFile certauthority.pem --sslPEMKeyPassword secretclient --host server1.arjarapu.net --port 22010
-
-
-# mongod --replSet <name> --sslMode requireSSL --clusterAuthMode x509 --sslClusterFile <path to membership certificate and key PEM file> --sslPEMKeyFile <path to SSL certificate and key PEM file> --sslCAFile <path to root CA PEM file>
-
-
-# openssl req -newkey rsa:2048 -new -x509 -days 365 -out mongodb-cert.crt -keyout mongodb-cert.key -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=$machineName.arjarapu.net"
-# cat mongodb-cert.key mongodb-cert.crt > mongodb.pem
-# mongod  --sslMode requireSSL --sslPEMKeyFile mongodb.pem --dbpath ./data --logpath ./mongod.log --fork --port 22010 --sslAllowConnectionsWithoutCertificates
-# mongo --ssl --sslCAFile mongodb.pem --host certauthority.arjarapu.net --port 22010
-
-
-
-# mongod --sslPEMKeyFile cert.authority.pem --sslMode requireSSL --sslAllowConnectionsWithoutCertificates --sslPEMKeyPassword secretca --dbpath ./data --logpath mongod.log --fork --port 22010
-# mongo --ssl --host certauthority.arjarapu.net --port 22010 --sslPEMKeyFile cert.authority.pem --sslPEMKeyPassword secretca
-
-# openssl genrsa -des3 -passout pass:secretca -out ../config/cert.authority.key 4096
-# openssl req -new -x509 -days 3650 -passin pass:secretca -key ../config/cert.authority.key -out ../config/cert.authority.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
-# cat ../config/cert.authority.key ../config/cert.authority.crt > ../config/cert.authority.pem
-
-
-createSubordinateCA secretca cert.authority true
-createSubordinateCA secretserver server1 false 
-createSubordinateCA secretserver server2 false 
-createSubordinateCA secretserver server3 false
-
-# create a mongod.conf placeholder file 
-cat <<EOF > ./config/mongod.conf 
+echo "
+# $curDir/rs1/mongod.conf
+storage:
+   dbPath: '$curDir/rs1/db'
 systemLog:
    destination: file
-   path: serverPath/mongod.log
+   path: '$curDir/rs1/mongodb.log'
    logAppend: true
-storage:
-   dbPath: serverPath/data
-   journal:
-      enabled: true
+   logRotate: rename
+replication:
+   replSetName: 'rsApp'
 processManagement:
    fork: true
-   pidFilePath: serverPath/mongod.pid
 net:
-   port: serverPort
+   port: 28001
    ssl:
-      mode: requireSSL
-      PEMKeyFile: serverPath/serverName.pem
-      PEMKeyPassword: secretserver
-      CAFile: serverPath/cert.authority.pem
-replication:
-   replSetName: rsProject
+      mode: preferSSL
+      PEMKeyFile: '$curDir/rs1/server1.arjarapu.net.pem'
+      PEMKeyPassword: 'secret_member'
+      CAFile: '$curDir/rs1/rootCA.public.crt'
+security:
+   clusterAuthMode: x509
+
+" | tee rs1/mongod.conf 
+sleep 1 
+
+cat rs1/mongod.conf |  sed 's/rs1/rs2/g' |  sed 's/28001/28002/g' |  sed 's/server1/server2/g' | tee rs2/mongod.conf 
+cat rs1/mongod.conf |  sed 's/rs1/rs3/g' |  sed 's/28001/28003/g' |  sed 's/server1/server3/g' | tee rs3/mongod.conf 
+
+
+################################################################################
+# Localhost testing 
+################################################################################
+# Generate the Certificate Authority
+caCertsPath='./certs'
+caPassword='secret_ca'
+caServerName='certauthority.arjarapu.net'
+
+# Generate the private root key file - this file should be kept secure:
+openssl genrsa -des3 -passout pass:$caPassword -out $caCertsPath/rootCA.private.key 4096
+sleep 1
+# Generate the public root certificate - it is our CAFile that has to be distributed among the servers and clients so they could validate each other’s certificates
+openssl req -x509 -new -days 365  -passin pass:$caPassword -key $caCertsPath/rootCA.private.key -out $caCertsPath/rootCA.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Certification Authority/CN=$caServerName"
+sleep 1
+
+
+# Signature: createCertificate <role:omgr,client,member1,kmipMember1> <FQDN> <PEM Password> <CA Password> <CN>
+createCertificate()
+{
+    serverRole=$1
+    serverName=$2
+    serverPassword=$3 
+    caPassword=$4
+    subject=$5
+
+    caCertsPath='./certs'
+    # Generate the private key file:
+    openssl genrsa -des3 -passout pass:$serverPassword -out $caCertsPath/$serverRole.$serverName.private.key 4096 
+    # Generate a Certificate Signing Request (CSR), ensure that the CN you specified matches the FQDN of the host
+    openssl req -new -passin pass:$serverPassword -key $caCertsPath/$serverRole.$serverName.private.key -out $caCertsPath/$serverRole.$serverName.csr -subj $subject
+    # Use the CSR to create a certificate signed with our root certificate
+    openssl x509 -req -passin pass:$caPassword -in $caCertsPath/$serverRole.$serverName.csr -CA $caCertsPath/rootCA.public.crt -CAkey $caCertsPath/rootCA.private.key -CAcreateserial -out $caCertsPath/$serverRole.$serverName.public.crt -days 365
+    # Concatenate them into a single .pem file - that is the PEMKeyFile option that should be used to start the mongod process
+    cat $caCertsPath/$serverRole.$serverName.private.key $caCertsPath/$serverRole.$serverName.public.crt > $caCertsPath/$serverRole.$serverName.pem    
+    # Verify that the .pem file can be validated with the root certificate that was used to sign it
+    # That should return $serverRole.$serverName.pem: OK
+    openssl verify -CAfile $caCertsPath/rootCA.public.crt $caCertsPath/$serverRole.$serverName.pem 
+}
+
+# Certificates: TLS for all members 
+createCertificate 'member' 'server1.arjarapu.net' 'secret_member' "$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=server1.arjarapu.net"
+createCertificate 'member' 'server2.arjarapu.net' 'secret_member' "$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=server2.arjarapu.net"
+createCertificate 'member' 'server3.arjarapu.net' 'secret_member' "$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=server3.arjarapu.net"
+
+# Certificate: Client
+createCertificate 'client' 'client.arjarapu.net' 'secret_client' "$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Clients/CN=client.arjarapu.net"
+
+# create 
+userCN=$( openssl x509 -in  $caCertsPath/client.client.arjarapu.net.pem  -inform PEM -subject -nameopt RFC2253 -noout | cut -d' ' -f2 )
+
+cat $caCertsPath/member.server1.arjarapu.net.private.key $caCertsPath/member.server1.arjarapu.net.public.crt > $caCertsPath/server1.arjarapu.net.pem 
+cat $caCertsPath/member.server2.arjarapu.net.private.key $caCertsPath/member.server2.arjarapu.net.public.crt > $caCertsPath/server2.arjarapu.net.pem 
+cat $caCertsPath/member.server3.arjarapu.net.private.key $caCertsPath/member.server3.arjarapu.net.public.crt > $caCertsPath/server3.arjarapu.net.pem 
+cat $caCertsPath/client.client.arjarapu.net.private.key $caCertsPath/client.client.arjarapu.net.public.crt > $caCertsPath/client.arjarapu.net.pem 
+
+cp $caCertsPath/rootCA.public.crt $caCertsPath/server1.arjarapu.net.pem  rs1/
+cp $caCertsPath/rootCA.public.crt $caCertsPath/server2.arjarapu.net.pem  rs2/
+cp $caCertsPath/rootCA.public.crt $caCertsPath/server3.arjarapu.net.pem  rs3/
+cp $caCertsPath/rootCA.public.crt $caCertsPath/client.arjarapu.net.pem  client/
+
+mongod --config rs1/mongod.conf
+mongod --config rs2/mongod.conf
+mongod --config rs3/mongod.conf
+
+echo "
+
+$userCN
+
+"
+mongo --port 28001  <<EOF
+use admin
+rs.initiate({_id: 'rsApp', 'members' : [{ '_id' : 0, 'host' : 'server1.arjarapu.net:28001' }]})
+sleep(10000)
+db.createUser({user: 'superuser', pwd: 'secret', roles: ['root']})
+db.auth('superuser', 'secret')
+rs.add({ host : 'server2.arjarapu.net:28002' })
+rs.add({ host : 'server3.arjarapu.net:28003' })
+db.getSiblingDB('\$external').runCommand({createUser: '$userCN', roles: [{role: 'root', db: 'admin'}]})
 EOF
 
-cp ./config/cert.authority.pem ./server1
-cp ./config/cert.authority.pem ./server2
-cp ./config/cert.authority.pem ./server3
 
-cp ./config/server1.pem ./server1
-cp ./config/server2.pem ./server2
-cp ./config/server3.pem ./server3
-
-# create 3 config servers
-sed "s#serverPath#`pwd`/server1#g" ./config/mongod.conf | sed 's/serverPort/27000/g' | sed 's/serverName/server1/g' > ./server1/mongod.conf
-sed "s#serverPath#`pwd`/server2#g" ./config/mongod.conf | sed 's/serverPort/27001/g' | sed 's/serverName/server2/g' > ./server2/mongod.conf
-sed "s#serverPath#`pwd`/server3#g" ./config/mongod.conf | sed 's/serverPort/27002/g' | sed 's/serverName/server3/g' > ./server3/mongod.conf
+# login to server using x509 
+mongo --host server1.arjarapu.net --port 28001 --ssl --sslPEMKeyFile client/client.arjarapu.net.pem --sslPEMKeyPassword secret_client --sslCAFile client/rootCA.public.crt <<EOF
+use admin; 
+db.getSiblingDB('\$external').auth({user: '$userCN', mechanism: 'MONGODB-X509'})
+use social
+db.people.insert({fname: 'shyam'})
+EOF
 
 
-mongod --config ./server1/mongod.conf 
-mongod --config ./server2/mongod.conf 
-mongod --config ./server3/mongod.conf 
+echo "
 
+mongo --host server1.arjarapu.net --port 28001 --ssl --sslPEMKeyFile client/client.arjarapu.net.pem --sslPEMKeyPassword secret_client --sslCAFile client/rootCA.public.crt
+use admin; 
+db.getSiblingDB('\$external').auth({user: '$userCN', mechanism: 'MONGODB-X509'})
 
-# mongo --port 22010 --ssl -sslPEMKeyFile mongodb.pem --host Shyams-MacBook-Pro.local --sslAllowInvalidCertificates
+"
 
