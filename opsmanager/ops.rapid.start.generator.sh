@@ -851,90 +851,87 @@ caCertsPath='$scriptsFolder/certs'
 caPassword='secret_ca'
 caServerName='${omgrPublicDNS[0]}'
 
-# x509: certificate is valid for ip-172-31-2-53.us-west-2.compute.internal, not ec2-54-191-156-24.us-west-2.compute.amazonaws.com
-
-    
 # Generate the private root key file - this file should be kept secure:
-# openssl genrsa -out \$caCertsPath/rootCA.private.key 2048
 openssl genrsa -des3 -passout pass:\$caPassword -out \$caCertsPath/rootCA.private.key 4096
+
 # Generate the public root certificate - it is our CAFile that has to be distributed among the servers and clients so they could validate each other’s certificates
-# openssl req -x509 -new -nodes -key \$caCertsPath/rootCA.private.key -days 365 -out \$caCertsPath/rootCA.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Certification Authority/CN=\$caServerName"
 openssl req -x509 -new -days 365  -passin pass:\$caPassword -key \$caCertsPath/rootCA.private.key -out \$caCertsPath/rootCA.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Certification Authority/CN=\$caServerName"
-    
 
-
-
+# Signature: createCertificate <role:omgr,client,member1,kmipMember1> <FQDN> <PEM Password> <CA Password> <CN>
 createCertificate()
 {
-    # create Certificate 
-
-
-    serverName=\$1
-    serverRole=\$2
-    serverPassword=\3 
+    serverRole=\$1
+    serverName=\$2
+    serverPassword=\$3 
+    caPassword=\$4
+    subject=\$5
 
     caCertsPath='$scriptsFolder/certs'
 
     # Generate the private key file:
-    # openssl genrsa -out \$caCertsPath/omgr.\$serverName.private.key 4096 
-    openssl genrsa -des3 -passout pass:\$serverPassword -out \$caCertsPath/omgr.\$serverName.private.key 4096 
+    openssl genrsa -des3 -passout pass:\$serverPassword -out \$caCertsPath/\$serverRole.\$serverName.private.key 4096 
 
-    # Generate a Certificate Signing Request (CSR) Give the Common Name (CN) and other details. 
-    # It is important to ensure that the CN you specified matches the FQDN of the host the certificate should be used on 
-    # (in this case, the host that will be running the mongod process). Otherwise the certificate validation may fail.
-    # openssl req -new -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
-    openssl req -new -passin pass:\$serverPassword -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
+    # Generate a Certificate Signing Request (CSR), ensure that the CN you specified matches the FQDN of the host
+    openssl req -new -passin pass:\$serverPassword -key \$caCertsPath/\$serverRole.\$serverName.private.key -out \$caCertsPath/\$serverRole.\$serverName.csr -subj \$subject
+    #  "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
 
     # Use the CSR to create a certificate signed with our root certificate
-    # openssl x509 -req -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
-    openssl x509 -req -passin pass:\$caPassword -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
+    openssl x509 -req -passin pass:\$caPassword -in \$caCertsPath/\$serverRole.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/\$serverRole.\$serverName.public.crt -days 365
 
 
     # Concatenate them into a single .pem file - that is the PEMKeyFile option that should be used to start the mongod process
-    cat \$caCertsPath/omgr.\$serverName.private.key \$caCertsPath/omgr.\$serverName.public.crt > \$caCertsPath/omgr.\$serverName.pem
+    cat \$caCertsPath/\$serverRole.\$serverName.private.key \$caCertsPath/\$serverRole.\$serverName.public.crt > \$caCertsPath/\$serverRole.\$serverName.pem
+    
     # Verify that the .pem file can be validated with the root certificate that was used to sign it
-    openssl verify -CAfile \$caCertsPath/rootCA.public.crt \$caCertsPath/omgr.\$serverName.pem 
-    # That should return omgr.\$serverName.pem: OK
-
+    # That should return \$serverRole.\$serverName.pem: OK
+    openssl verify -CAfile \$caCertsPath/rootCA.public.crt \$caCertsPath/\$serverRole.\$serverName.pem 
 }
 
-# createCertificate <FQDN> <role:omgr,client,member1,kmipMember1> <pem password>
-# Certificate: Ops Manager WebServer
-createCertificate '${omgrPublicDNS[0]}' 'omgr' secret_omgr'
 
 # Certificate: Ops Manager WebServer
-serverName='${omgrPublicDNS[0]}'
-serverPassword='secret_omgr'
+createCertificate 'omgr' '${omgrPublicDNS[0]}' 'secret_omgr' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=${omgrPublicDNS[0]}"
 
-# Generate the private key file:
-# openssl genrsa -out \$caCertsPath/omgr.\$serverName.private.key 4096 
-openssl genrsa -des3 -passout pass:\$serverPassword -out \$caCertsPath/omgr.\$serverName.private.key 4096 
+# Certificates: TLS for all members 
+createCertificate 'member' '${mongoPrivateDNS[0]}' 'secret_member' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=${mongoPrivateDNS[0]}"
+createCertificate 'member' '${mongoPrivateDNS[1]}' 'secret_member' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=${mongoPrivateDNS[1]}"
+createCertificate 'member' '${mongoPrivateDNS[2]}' 'secret_member' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=${mongoPrivateDNS[2]}"
 
-# Generate a Certificate Signing Request (CSR) Give the Common Name (CN) and other details. 
-# It is important to ensure that the CN you specified matches the FQDN of the host the certificate should be used on 
-# (in this case, the host that will be running the mongod process). Otherwise the certificate validation may fail.
-# openssl req -new -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
-openssl req -new -passin pass:\$serverPassword -key \$caCertsPath/omgr.\$serverName.private.key -out \$caCertsPath/omgr.\$serverName.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Operations/CN=\$serverName"
+# Certificate: Client
+createCertificate 'client' '${omgrPrivateDNS[0]}' 'secret_client' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Clients/CN=${omgrPrivateDNS[0]}"
+createCertificate 'client' '${omgrPrivateDNS[1]}' 'secret_client' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Clients/CN=${omgrPrivateDNS[1]}"
+createCertificate 'client' '${omgrPrivateDNS[2]}' 'secret_client' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Clients/CN=${omgrPrivateDNS[2]}"
 
-# Use the CSR to create a certificate signed with our root certificate
-# openssl x509 -req -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
-openssl x509 -req -passin pass:\$caPassword -in \$caCertsPath/omgr.\$serverName.csr -CA \$caCertsPath/rootCA.public.crt -CAkey \$caCertsPath/rootCA.private.key -CAcreateserial -out \$caCertsPath/omgr.\$serverName.public.crt -days 365
+# Certificate: Super User 
+superUser="/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Users/CN=${omgrPrivateDNS[0]}"
+createCertificate 'user' '${omgrPrivateDNS[0]}' 'secret_user' "\$caPassword" \$superUser
+
+# create 
+userCN=\$( openssl x509 -in  ./scripts/certs/user.${omgrPrivateDNS[0]}.pem  -inform PEM -subject -nameopt RFC2253 -noout | cut -d' ' -f2 )
 
 
-# Concatenate them into a single .pem file - that is the PEMKeyFile option that should be used to start the mongod process
-cat \$caCertsPath/omgr.\$serverName.private.key \$caCertsPath/omgr.\$serverName.public.crt > \$caCertsPath/omgr.\$serverName.pem
-# Verify that the .pem file can be validated with the root certificate that was used to sign it
-openssl verify -CAfile \$caCertsPath/rootCA.public.crt \$caCertsPath/omgr.\$serverName.pem 
-# That should return omgr.\$serverName.pem: OK
 
-# openssl genrsa -des3 -passout pass:\$spassword -out \$scpath/\$sname.private.key 4096
-# openssl req -new -passin pass:\$spassword -key \$scpath/\$sname.private.key -out \$scpath/\$sname.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=\$orgunit/CN=\$sname"
-# openssl x509 -req -extfile \$cpath/extensions.conf -passin pass:\$cpass -days 365 -in \$scpath/\$sname.csr -CA \$cpath/rootca.public.crt -CAkey \$cpath/rootca.private.key -set_serial 01 -out \$scpath/\$sname.public.crt
+################################################################################
+# Localhost testing 
+################################################################################
+# Certificates: TLS for all members 
+createCertificate 'member' 'server1.arjarapu.net' 'secret_member' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=server1.arjarapu.net"
+createCertificate 'member' 'server2.arjarapu.net' 'secret_member' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=server2.arjarapu.net"
+createCertificate 'member' 'server3.arjarapu.net' 'secret_member' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=server3.arjarapu.net"
+
+# Certificate: Client
+createCertificate 'client' 'client.arjarapu.net' 'secret_client' "\$caPassword" "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Clients/CN=client.arjarapu.net"
+
+
+
+
+
+
 
 echo "openssl x509 -in client.pem -inform PEM -subject -nameopt RFC2253 -noout"
-eco "db.getSiblingDB('\$external').runCommand({createUser: "C=US,ST=Texas,L=Austin,O=MongoDB,OU=Database,CN=\$serverName", roles: [{role: 'root', db: 'admin'}]})"
-echo "Client Certificate Mode * ** "
+echo "use admin; db.getSiblingDB('\\\$external').runCommand({createUser: \$superUser, roles: [{role: 'root', db: 'admin'}]})"
+echo "use admin; db.getSiblingDB('\\\$external').auth({user: \$superUser, mechanism: 'MONGODB-X509'})"
 
+echo "Client Certificate Mode * ** "
 echo "scp -i $awsPrivateKeyPath \$caCertsPath/omgr.\$serverName.pem  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
 echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.private.key  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
 echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.public.crt  $awsSSHUser@${omgrPublicDNS[2]}:/home/$awsSSHUser"
