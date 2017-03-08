@@ -1,0 +1,8 @@
+---
+
+- hosts: mongodb 
+  user: sudo
+  tasks:
+     - name: update apt 
+       shell: whoami
+

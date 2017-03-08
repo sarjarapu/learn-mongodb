@@ -1,0 +1,13 @@
+[mongodb]
+mongodb1 ansible_ssh_host=ec2-54-203-139-48.us-west-2.compute.amazonaws.com
+mongodb2 ansible_ssh_host=ec2-54-212-213-84.us-west-2.compute.amazonaws.com
+mongodb3 ansible_ssh_host=ec2-54-218-108-134.us-west-2.compute.amazonaws.com
+
+[ops_manager]
+ec2-54-187-136-187.us-west-2.compute.amazonaws.com
+ec2-54-202-66-31.us-west-2.compute.amazonaws.com
+ec2-54-213-66-152.us-west-2.compute.amazonaws.com
+ec2-54-244-161-160.us-west-2.compute.amazonaws.com
+
+[local]
+localhost ansible_connection=local

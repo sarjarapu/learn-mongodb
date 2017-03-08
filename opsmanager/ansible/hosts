@@ -1,0 +1,13 @@
+[local]
+localhost ansible_connection=local
+
+[dev]
+server1.arjarapu.net
+server2.arjarapu.net
+server3.arjarapu.net
+
+[qa]
+mongodb01 ansible_ssh_host=ec2-54-149-80-156.us-west-2.compute.amazonaws.com
+mongodb02 ansible_ssh_host=ec2-54-190-36-24.us-west-2.compute.amazonaws.com
+mongodb03 ansible_ssh_host=ec2-54-190-35-69.us-west-2.compute.amazonaws.com
+

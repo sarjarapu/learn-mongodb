@@ -1,0 +1,4 @@
+---
+local_root_dir: /Users/shyamarjarapu/Code/work/git-hub/sarjarapu/learn-mongodb/opsmanager/ansible
+template_dir: '{{ local_root_dir }}/templates'
+output_dir: '{{ local_root_dir }}/output'
