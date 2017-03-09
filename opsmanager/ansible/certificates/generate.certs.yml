@@ -2,6 +2,8 @@
 - name: generate certificates for root certificate authority, mongodb member
   hosts: local
   
-#- include: generate.root.certificate.yml
+- include: generate.root.certificate.yml
 
 - include: generate.member.certificate.yml
+
+- include: execute.generate.certificate.scripts.yml

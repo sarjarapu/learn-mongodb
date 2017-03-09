@@ -10,6 +10,3 @@
         src: '{{ template_dir }}/certificates/generate.root.certificate.authority.txt'
         dest: '{{ output_dir }}/scripts/certificates/generate.root.certificate.authority.sh'
         mode: 0744
-      
-    - name: run the root certificate authority generated file 
-      shell: '{{ output_dir }}/scripts/certificates/generate.root.certificate.authority.sh'
