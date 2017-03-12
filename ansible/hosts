@@ -1,0 +1,29 @@
+[local]
+localhost ansible_connection=local
+
+[mongos_servers]
+ska-mvup-mongos01 ansible_ssh_host=ec2-54-213-85-84.us-west-2.compute.amazonaws.com
+ska-mvup-mongos02 ansible_ssh_host=ec2-54-202-49-147.us-west-2.compute.amazonaws.com
+ska-mvup-mongos03 ansible_ssh_host=ec2-54-213-131-137.us-west-2.compute.amazonaws.com
+
+[mongod_shard_01]
+ska-mvup-shard11 ansible_ssh_host=ec2-54-149-88-74.us-west-2.compute.amazonaws.com
+ska-mvup-shard12 ansible_ssh_host=ec2-54-213-86-136.us-west-2.compute.amazonaws.com
+ska-mvup-shard13 ansible_ssh_host=ec2-54-202-236-134.us-west-2.compute.amazonaws.com
+
+[mongod_shard_01]
+ska-mvup-shard21 ansible_ssh_host=ec2-54-201-143-18.us-west-2.compute.amazonaws.com
+ska-mvup-shard22 ansible_ssh_host=ec2-54-191-161-146.us-west-2.compute.amazonaws.com
+ska-mvup-shard23 ansible_ssh_host=ec2-54-149-188-31.us-west-2.compute.amazonaws.com
+
+[mongoc_servers]
+ska-mvup-config01 ansible_ssh_host=ec2-54-202-116-118.us-west-2.compute.amazonaws.com
+ska-mvup-config02 ansible_ssh_host=ec2-54-190-47-135.us-west-2.compute.amazonaws.com
+ska-mvup-config03 ansible_ssh_host=ec2-54-202-227-246.us-west-2.compute.amazonaws.com
+
+[mongo:children]
+mongos_servers
+mongod_shard_01
+mongod_shard_02
+mongoc_servers
+

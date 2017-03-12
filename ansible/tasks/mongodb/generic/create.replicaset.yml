@@ -1,0 +1,18 @@
+---
+- name: create replicaset 
+  hosts: qa
+  remote_user: ubuntu
+  tasks:
+
+    - name: create directory for output, scripts and mongodb
+      file: path='{{ output_dir }}/scripts/mongodb/' state=directory mode=0755
+
+    - name: generate script file for creating the disk encryption key file 
+      template:
+        src: '{{ template_dir }}/mongodb/generate.encryption.keyfile.txt'
+        dest: '{{ output_dir }}/scripts/mongodb/generate.encryption.keyfile.sh'
+        mode: 0744
+
+    - name: execute the generate encrypt
+      script: '{{ output_dir }}/scripts/mongodb/generate.encryption.keyfile.sh'
+      become: true

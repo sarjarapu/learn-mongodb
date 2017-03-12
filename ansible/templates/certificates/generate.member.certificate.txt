@@ -1,0 +1,39 @@
+# Generate the private key file server 1: {{ item }}.pem
+openssl genrsa -out {{ output_dir }}/certs/{{ item }}.key 2048 {{ output_dir }}/certs/{{ item }}.pem
+openssl req -new -key {{ output_dir }}/certs/{{ item }}.key -out {{ output_dir }}/certs/{{ item }}.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN={{ item }}.c.avy-prd-env.internal"
+openssl x509 -req -in {{ output_dir }}/certs/{{ item }}.csr -CA {{ output_dir }}/certs/rootCA.crt -CAkey {{ output_dir }}/certs/rootCA.key -CAcreateserial -out {{ output_dir }}/certs/{{ item }}.crt -days 365
+cat {{ output_dir }}/certs/{{ item }}.key {{ output_dir }}/certs/{{ item }}.crt > {{ output_dir }}/certs/{{ item }}.pem
+openssl verify -CAfile {{ output_dir }}/certs/rootCA.crt {{ output_dir }}/certs/{{ item }}.pem
+# That should return
+# server.pem: OK
+
+
+# Generate the private key file server 2: avy-prd-corp-mongo2.pem
+# openssl genrsa -out avy-prd-corp-mongo2.key 2048 avy-prd-corp-mongo2.pem
+# openssl req -new -key avy-prd-corp-mongo2.key -out avy-prd-corp-mongo2.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=avy-prd-corp-mongo2.c.avy-prd-env.internal"
+# openssl x509 -req -in avy-prd-corp-mongo2.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out avy-prd-corp-mongo2.crt -days 365
+# cat avy-prd-corp-mongo2.key avy-prd-corp-mongo2.crt > avy-prd-corp-mongo2.pem
+# openssl verify -CAfile rootCA.crt avy-prd-corp-mongo2.pem
+# That should return
+# server.pem: OK
+
+
+# Generate the private key file server 3: avy-prd-corp-mongo3.pem
+# openssl genrsa -out avy-prd-corp-mongo3.key 2048 avy-prd-corp-mongo3.pem
+# openssl req -new -key avy-prd-corp-mongo3.key -out avy-prd-corp-mongo3.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Databases/CN=avy-prd-corp-mongo3.c.avy-prd-env.internal"
+# openssl x509 -req -in avy-prd-corp-mongo3.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out avy-prd-corp-mongo3.crt -days 365
+# cat avy-prd-corp-mongo3.key avy-prd-corp-mongo3.crt > avy-prd-corp-mongo3.pem
+# openssl verify -CAfile rootCA.crt avy-prd-corp-mongo3.pem
+# That should return
+# server.pem: OK
+
+# cp rootCA.crt rootCA.pem 
+
+# scp -i ~/.ssh/amazonaws_rsa {{ item }}.pem rootCA.pem ubuntu@ec2-54-149-80-156.us-west-2.compute.amazonaws.com:/home/ubuntu
+# scp -i ~/.ssh/amazonaws_rsa avy-prd-corp-mongo2.pem rootCA.pem ubuntu@ec2-54-190-36-24.us-west-2.compute.amazonaws.com:/home/ubuntu
+# scp -i ~/.ssh/amazonaws_rsa avy-prd-corp-mongo3.pem rootCA.pem ubuntu@ec2-54-190-35-69.us-west-2.compute.amazonaws.com:/home/ubuntu
+
+# scp -i ~/.ssh/amazonaws_rsa ~/.ssh/amazonaws_rsa ubuntu@ec2-54-186-27-176.us-west-2.compute.amazonaws.com:/home/ubuntu
+
+# mongod --sslMode requireSSL --sslPEMKeyFile server.pem --sslCAFile rootCA.crt
+# mongo --host <hostname> --ssl --sslCAFile rootCA.crt --sslPEMKeyFile client.pem 

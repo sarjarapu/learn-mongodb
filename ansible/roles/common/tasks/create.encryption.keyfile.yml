@@ -1,0 +1,20 @@
+---
+
+- name: check if encryption keyfile already exists
+- stat: 
+    path: /etc/security/mongodb-encryption-keyfile
+  register: check_encryption_keyfile
+
+- name: use openssl to create random 32 byte encryption keyfile
+  shell: openssl rand -base64 32 | tee /etc/security/mongodb-encryption-keyfile
+  become: true
+  when: check_encryption_keyfile.stats.exists == False
+
+- name: use openssl to create random 32 byte encryption keyfile
+  file: 
+    path: /etc/security/mongodb-encryption-keyfile
+    owner: mongodb
+    group: mongodb 
+    mode: 600
+  become: true
+  when: check_encryption_keyfile.stats.exists == False

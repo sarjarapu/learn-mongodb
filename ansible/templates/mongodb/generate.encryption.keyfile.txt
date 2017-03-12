@@ -1,0 +1,3 @@
+sudo openssl rand -base64 32 | sudo tee /etc/security/mongodb-encryption-keyfile
+sudo chmod 600 /etc/security/mongodb-encryption-keyfile
+sudo chown mongodb:mongodb /etc/security/mongodb-encryption-keyfile
