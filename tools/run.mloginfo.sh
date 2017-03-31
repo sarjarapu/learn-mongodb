@@ -19,10 +19,24 @@ done
 
 # create mloginfo folder and move mloginfo files there 
 mkdir -p $MLOGINFO_FOLDER
-mv *.mloginfo $MLOGINFO_FOLDER/
+mv $LOG_FOLDER/*.mloginfo $MLOGINFO_FOLDER/
 
 # create tsv folder and move tsv files there
 mkdir -p $TSV_FOLDER
-mv *.tsv $TSV_FOLDER/
+mv $LOG_FOLDER/*.tsv $TSV_FOLDER/
+echo "Completed processing all files in '$LOG_FOLDER'"
 
-echo "Completed processing all files in '$d'"
+firstFile=true
+consolidatedFile=$TSV_FOLDER/consolidated.txt
+for filePath in $TSV_FOLDER/*.tsv
+do
+filename=$(basename "$filePath")
+if [ "$firstFile" == "true" ]; then
+	grep -v '^$' $filePath | sed '1,/QUERIES/d' | sed -e "s/^/$filename    /" | tee $consolidatedFile  > /dev/null
+    firstFile=false
+else
+	grep -v '^$' $filePath | sed '1,/namespace/d' | sed -e "s/^/$filename  /" | tee -a $consolidatedFile > /dev/null
+fi
+done
+
+echo "Consolidated mloginfo output file is in '$consolidatedFile'"
