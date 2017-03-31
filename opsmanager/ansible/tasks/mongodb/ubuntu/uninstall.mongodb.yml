@@ -1,0 +1,39 @@
+---
+- name: install the mongodb enterprise 
+  hosts: mongodb01
+  remote_user: ubuntu
+  tasks:
+
+    - service:
+        name: mongod
+        state: stopped
+      become: true
+
+    - name: uninstall mongodb 
+      apt: 
+        name: mongodb-enterprise
+        state: absent
+      become: true
+
+    - file:
+        path: '{{ item }}'
+        state: absent
+      with_items:
+        - /var/log/mongodb/
+        - /var/run/mongodb/
+        - /data
+      become: true
+
+    - name: Add mongodb enterprise repo 
+      apt_repository:
+        repo: deb [ arch=amd64,arm64,ppc64el,s390x ]  http://repo.mongodb.com/apt/ubuntu xenial/mongodb-enterprise/3.4 multiverse
+        state: absent
+        filename: 'mongodb-enterprise'
+      become: true
+
+    - name: Add an apt key by id from a keyserver
+      apt_key: 
+        keyserver: hkp://keyserver.ubuntu.com:80
+        id: 0C49F3730359A14518585931BC711F9BA15703C6
+        state: absent
+      become: true

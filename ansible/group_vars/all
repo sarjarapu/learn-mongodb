@@ -1,6 +1,6 @@
 ---
-ansible_ssh_user: ubuntu
+ansible_ssh_user: ec2-user
 # remote_user: ubuntu
-local_root_dir: /Users/shyamarjarapu/Code/work/git-hub/sarjarapu/learn-mongodb/opsmanager/ansible
+local_root_dir: /Users/shyamarjarapu/Code/work/git-hub/sarjarapu/learn-mongodb/ansible
 template_dir: '{{ local_root_dir }}/templates'
 output_dir: '{{ local_root_dir }}/output'

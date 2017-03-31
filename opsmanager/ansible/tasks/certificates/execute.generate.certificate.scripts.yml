@@ -1,0 +1,12 @@
+---
+- name: generate root certificates authority
+  hosts: local
+  tasks:
+
+    - name: execute the generate root certificate script 
+      shell: '{{ output_dir }}/scripts/certificates/generate.root.certificate.authority.sh'
+
+    - name: execute the generate member certificate script 
+      shell: '{{ item }}'
+      with_fileglob: 
+        - '{{ output_dir }}/scripts/certificates/generate.certificate.*.sh'
