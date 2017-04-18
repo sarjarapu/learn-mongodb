@@ -1,0 +1,16 @@
+---
+- name: generate member certificates
+  hosts: local
+  tasks:
+    - name: generate script file for member certificate using template file
+      template:
+        src: '{{ template_dir }}/certificates/generate.member.certificate.txt'
+        dest: '{{ output_dir }}/scripts/certificates/generate.certificate.{{ item }}.sh'
+        mode: 0744
+      with_items:
+        - avy-prd-corp-mongo1
+        - avy-prd-corp-mongo2
+        - avy-prd-corp-mongo3
+        
+#    - name: run the root certificate authority generated file 
+#      shell: '{{ output_dir }}/scripts/certificates/generate.root.certificate.authority.sh'

@@ -1,13 +1,14 @@
 #!/bin/sh
 
 
+
 ############################################################
 # Documentation:
 #   https://docs.opsmanager.mongodb.com/v3.4/tutorial/install-basic-deployment/
 # Tools:
 #   brew install https://raw.githubusercontent.com/djui/i2cssh/master/i2cssh.rb
 # Notes: 
-#   Amazon: m3.2xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
+#   Amazon: m4.2xlarge, 60 GB disk, 15 instances, Oregon, vpc-0cdb1d68, us-west-2c
 #   Total WTC: 5% = 3 GB. (Backups require oplog window > 24 hrs) 
 #     or Replication  Window < 0.128 GB / hour
 #   If init.d scripts aren't starting the process delete /data/appdb/mongod.pid 
@@ -19,7 +20,7 @@
 # lsblk
 # sudo mkfs.xfs /dev/xvdf
 # sudo mkdir /backup
-
+# ??? user auth multiple deployments same db credentials ???
 ############################################################
 
 ############################################################
@@ -35,9 +36,9 @@
 #  Daemon:                BackupD
 # File SS:  mount 
 
-awsInstanceTagName='ska-ors2'
+awsInstanceTagName='ska-ors'
 # expects to have images ska-ors-omgr, ska-ors-mongo and ska-ors-pool
-osFlavor='ubuntu' # amazon_linux rhel ubuntu
+osFlavor='amazon' # amazon rhel ubuntu
 awsSSHUser='ec2-user'
 useArbiter='true'
 
@@ -132,6 +133,7 @@ echo "
 `printf '%s\n' "${mongoResult[@]}"`
 
 # Load Balancer configuration
+# 172.31.1.88            ska-certauthority.us-west-2.compute.internal
 http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com
 :8080
 /user/login
@@ -276,13 +278,10 @@ fi
 # Without yum -y upgrade , there is enterprise lib*.so dependency failures I have come across while automating on amazon_linux 
 
 
-sudo mkdir -p $dataFolder/db
-sudo chown -R $mongoUser:$mongoUser $dataFolder
+sudo mkdir -p /data/db /var/run/mongodb /var/lib/mongodb /var/log/mongodb/
 sudo rm -rf /var/lib/mongodb
 sudo ln -s /data/db /var/lib/mongodb
-sudo mkdir -p /var/run/mongodb /var/lib/mongodb /var/log/mongodb/
-sudo chown -R $mongoUser:$mongoUser /var/run/mongodb /var/lib/mongodb /var/log/mongodb/
-# sudo chown -R $mongoUser:$mongoUser /var/lib/mongodb 
+sudo chown -R mongodb:mongodb /data /var/run/mongodb /var/lib/mongodb /var/log/mongodb/
 
 # Ubuntu didn't work 
 #     with -u ; just run without  -u $mongoUser
@@ -298,6 +297,10 @@ systemLog:
    logRotate: reopen
 storage:
    dbPath: $dataFolder/db
+   engine: "wiredTiger"
+   wiredTiger:
+      engineConfig:
+         cacheSizeGB: 8
 processManagement:
    pidFilePath: /var/run/mongodb/mongod.pid
    fork: $isForkable
@@ -313,10 +316,32 @@ EOF
 sudo -u $mongoUser sh -c "echo $rsAppDBKeyfileSalt | openssl sha1 -sha512  | sed 's/(stdin)= //g' > $dataFolder/keyfile"
 sleep 1
 sudo -u $mongoUser sh -c 'chmod 400 $dataFolder/keyfile'
-# sudo -u $mongoUser /usr/bin/mongod --config /etc/mongod.conf 
-# sudo service mongod start
-# Run the 06.init.d here , then start 
 
+
+if [ '$osFlavor' == 'ubuntu' ]
+then
+# Add the missing startpre scripts 
+execStartPre='ExecStartPre=/bin/mkdir -p /var/run/mongodb
+ExecStartPre=/bin/chown mongodb:mongodb /var/run/mongodb
+ExecStartPre=/bin/chmod 0755 /var/run/mongodb
+PIDFile=/var/run/mongodb/mongod.pid
+PermissionsStartOnly=true'
+
+echo "\`head -8 /lib/systemd/system/mongod.service\`
+\$execStartPre
+\`tail -n +9 /lib/systemd/system/mongod.service\`" | sudo tee  /lib/systemd/system/mongod.service
+
+# confirm the injection 
+cat /lib/systemd/system/mongod.service
+
+# Start the new service and enable it on boot
+sudo systemctl --system daemon-reload
+sudo systemctl enable mongod.service
+sudo systemctl start mongod.service
+# sudo systemctl status mongod.service
+fi 
+
+# sudo -u $mongoUser /usr/bin/mongod --config /etc/mongod.conf 
 sleep 2
 INSOPSMGR
 
@@ -347,6 +372,7 @@ tee "$scriptsFolder/03.opsmgr.oplogdb.install.sh" <<INITDAPPDB
 sudo mkdir -p $dataFolder/oplogstore
 sudo chown $mongoUser:$mongoUser -R $dataFolder
 
+# TODO: amazon -- etc/mongod-oplogstore.conf path fix in sed regex
 # Ubuntu didn't work 
 #     with -u ; just run without  -u $mongoUser
 #     initially disabling security before we add user, then later enable it 
@@ -361,6 +387,10 @@ systemLog:
    logRotate: reopen
 storage:
    dbPath: $dataFolder/oplogstore
+   engine: "wiredTiger"
+   wiredTiger:
+      engineConfig:
+         cacheSizeGB: 8
 processManagement:
    pidFilePath: /var/run/mongodb/mongod-oplogstore.pid
    fork: $isForkable
@@ -502,14 +532,16 @@ sudo chkconfig mongod-oplogstore on
 sudo service mongod-oplogstore restart
 
 else 
-# sudo curl https://raw.githubusercontent.com/mongodb/mongo/master/debian/mongod.service --output /tmp/mongod-oplogstore.service
 
 cat /lib/systemd/system/mongod.service | \
     sed 's#mongod\.#mongod-oplogstore.#g' | \
     sudo tee /lib/systemd/system/mongod-oplogstore.service
 
-sudo systemctl enable mongod-oplogstore.service 
-sudo service mongod-oplogstore start 
+sudo systemctl --system daemon-reload
+sudo systemctl enable mongod-oplogstore.service
+sudo systemctl start mongod-oplogstore.service
+# sudo systemctl status mongod-oplogstore.service
+
 fi
 
 INITDOPLOGDB
@@ -588,6 +620,14 @@ tee "$scriptsFolder/09.opsmgr.config.http.sh" <<CONFIGHTTP
 ############################################################
 # http://${omgrPublicDNS[0]}:8080
 # http://${omgrPrivateDNS[0]}:8080
+# http://${omgrPublicDNS[0]}:8443
+# http://${omgrPrivateDNS[0]}:8443
+# Load Balancer configuration
+# http://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com:8080
+# https://ska-clb-01-2076939081.us-west-2.elb.amazonaws.com
+# AWS-LB > Health Check > :8080 | /user/login
+# AWS-LB > Health Check > :8443 | /user/login
+# X-Forwarded-For
 # shyam.arjarapu@10gen.com ORS smtp.gmail.com
 
 ############################################################
@@ -660,8 +700,8 @@ opsmgrUri=${omgrPublicDNS[0]}
 mmsGroupId=58a11019d0f6c8231193df72
 mmsApiKey=be6793ccfb0a74b2b239650fa788367f
 
-
-curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+# what about the https ?
+curl -k -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager\$binaryVersionWithExt -k
 
 if [ '$osFlavor' == 'ubuntu' ]
 then
@@ -678,6 +718,14 @@ sudo sed "s/mmsGroupId=.*\$/mmsGroupId=\$mmsGroupId/g" /etc/mongodb-mms/automati
     tee /tmp/automation-agent.config
 sudo -u $mongoUser cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config
+
+# sslTrustedMMSServerCertificate=/etc/ssl/rootCA.pem
+# sslRequireValidMMSServerCertificates=false
+# mongo --host ip-172-31-3-184.us-west-2.compute.internal --port 27000 --ssl --sslPEMKeyFile /etc/ssl/omgr.ska-clb-01-2076939081.us-west-2.elb.amazonaws.com.pem --sslCAFile /etc/ssl/rootCA.public.crt
+# mongo --host ip-172-31-3-184.us-west-2.compute.internal --port 27000 --ssl --sslPEMKeyFile /etc/ssl/rootCA.pem --sslCAFile /etc/ssl/rootCA.public.crt
+# sudo tcpdump -X -i ens3 'port 27000'
+# sudo tcpdump -X -i lo0 'port 27017'
+db.people.insert({ssn: 'you should not be looking at this secret stuff', text: 'other secret stuff in there'})
 
 sudo mkdir -p $dataFolder
 sudo chown $mongoUser:$mongoUser $dataFolder
@@ -708,7 +756,7 @@ mmsApiKey=3136703d14c1919ee176180c2b5d7157
 sudo yum -y upgrade 
 
 
-curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager\$binaryVersionWithExt
+curl -OL http://\$opsmgrUri:8080/download/agent/automation/mongodb-mms-automation-agent-manager\$binaryVersionWithExt -k
 
 if [ '$osFlavor' == 'ubuntu' ]
 then
@@ -724,6 +772,10 @@ sudo sed 's/serverPoolKey=/serverPoolKey=$serverPoolKey/g' /etc/mongodb-mms/auto
     tee /tmp/automation-agent.config
 sudo -u $mongoUser cp /tmp/automation-agent.config /etc/mongodb-mms/automation-agent.config
 sudo cat /etc/mongodb-mms/automation-agent.config
+
+# sslTrustedServerCertificates=/etc/ssl/rootCA.pem
+
+
 
 
 # 1 MEDIUM across US-EAST, US-CENTRAL, US-WEST
@@ -775,69 +827,6 @@ cat "$scriptsFolder/00.drive.creation.sh" "$scriptsFolder/01.opsmgr.appdb.instal
 cat "$scriptsFolder/02.opsmgr.appdb.configrs.sh" "$scriptsFolder/04.opsmgr.oplogdb.configrs.sh" > "$scriptsFolder/99.02.opsmgr.appdb.oplogdb.configrs.sh" 
 cat "$scriptsFolder/07.opsmgr.install.http.sh" "$scriptsFolder/08.opsmgr.start.http.sh" "$scriptsFolder/09.opsmgr.config.http.sh" "$scriptsFolder/10.opsmgr.config.backup.sh"  > "$scriptsFolder/99.03.opsmgr.configuration.sh" 
 
-
-tee "$scriptsFolder/90.opsmgr.certificates.sh" <<CERTS
-###############################################################
-# Create certificates required for Ops Manager demo 
-###############################################################
-
-createCACertificate()
-{
-    # create CA Certificate 
-    cpath=\$1
-    cpass=\$2
-    openssl genrsa -des3 -passout pass:\$cpass -out \$cpath/rootca.private.key 4096
-    openssl req -new -x509 -days 3650 -passin pass:\$cpass -key \$cpath/rootca.private.key -out \$cpath/rootca.public.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Consulting/CN=certauthority.arjarapu.net"
-    cat \$cpath/rootca.private.key \$cpath/rootca.public.crt > \$cpath/rootca.pem
-}
-
-createCertificate()
-{
-    # create Certificate 
-    cpath=\$1
-    cpass=\$2
-
-    spassword=\$4
-    sname=\$5
-    scpath=\$3/certs
-    orgunit=\$6
-
-    openssl genrsa -des3 -passout pass:\$spassword -out \$scpath/\$sname.private.key 4096
-    openssl req -new -passin pass:\$spassword -key \$scpath/\$sname.private.key -out \$scpath/\$sname.csr -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=\$orgunit/CN=\$sname"
-    openssl x509 -req -extfile \$cpath/extensions.conf -passin pass:\$cpass -days 365 -in \$scpath/\$sname.csr -CA \$cpath/rootca.public.crt -CAkey \$cpath/rootca.private.key -set_serial 01 -out \$scpath/\$sname.public.crt
-    cat \$scpath/\$sname.private.key \$scpath/\$sname.public.crt > \$scpath/\$sname.pem
-}
-
-
-# Generate the Certificate Authority
-caCertsPath=$scriptsFolder/certs
-caPassword=secret_ca
-
-# Create the extensions file 
-echo "[extensions]
-keyUsage = digitalSignature
-extendedKeyUsage = clientAuth" | tee \$caCertsPath/extensions.conf 
-sleep 1
-
-createCACertificate \$caCertsPath \$caPassword
-sleep 2
-
-# Certificates for HTTPS Web
-# Generate the certificate for server and sign it with ca 
-serverName='ska-clb-01-2076939081.us-west-2.elb.amazonaws.com'
-serverPath=$scriptsFolder/
-serverPassword=secret_lb_https
-createCertificate \$caCertsPath \$caPassword \$serverPath \$serverPassword \$serverName Consulting
-sleep 2
-
-
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${omgrPublicDNS[1]}:/home/$awsSSHUser"
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/\$serverName.pem  $awsSSHUser@${omgrPublicDNS[2]}:/home/$awsSSHUser"
-
-echo "sudo mv $serverName.pem /etc/security/opsmanager.pem"
-echo "X-Forwarded-For"
-CERTS
 
 
 
@@ -932,14 +921,63 @@ echo "use admin; db.getSiblingDB('\\\$external').runCommand({createUser: \$super
 echo "use admin; db.getSiblingDB('\\\$external').auth({user: \$superUser, mechanism: 'MONGODB-X509'})"
 
 echo "Client Certificate Mode * ** "
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/omgr.\$serverName.pem  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
-echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.private.key  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/omgr.${omgrPublicDNS[0]}.pem  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/omgr.${omgrPublicDNS[1]}.pem  $awsSSHUser@${omgrPublicDNS[1]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/omgr.${omgrPublicDNS[2]}.pem  $awsSSHUser@${omgrPublicDNS[2]}:/home/$awsSSHUser"
+
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.public.crt  $awsSSHUser@${omgrPublicDNS[0]}:/home/$awsSSHUser"
+echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.public.crt  $awsSSHUser@${omgrPublicDNS[1]}:/home/$awsSSHUser"
 echo "scp -i $awsPrivateKeyPath \$caCertsPath/rootCA.public.crt  $awsSSHUser@${omgrPublicDNS[2]}:/home/$awsSSHUser"
 
 echo "sudo mv omgr.\$serverName.pem /etc/security/opsmanager.pem"
 echo "X-Forwarded-For"
 
 CERTS
+
+
+
+
+tee "$scriptsFolder/15.mongodb.production.notes.sh" <<NOTES
+###############################################################
+# Production Notes scripts for all mongods 
+# ulimit: sudo sh -c 'ulimit -a' -e mongodb
+# NUMA:  sudo cat /proc/sys/vm/zone_reclaim_mode
+# TCP: sudo cat /proc/sys/net/ipv4/tcp_keepalive_time
+# THP: sudo cat /sys/kernel/mm/transparent_hugepage/enabled 
+# sudo cat /sys/kernel/mm/transparent_hugepage/defrag
+###############################################################
+
+# sudo cat /etc/security/limits.conf
+echo "
+*     soft     nofile     64000
+*     hard     nofile     64000
+*     -        fsize      unlimited
+*     -        cpu        unlimited
+*     hard     rss        unlimited
+" | sudo tee -a /etc/security/limits.conf
+
+
+# sudo cat /etc/sysctl.conf
+echo "
+net.ipv4.tcp_keepalive_time = 120
+vm.zone_reclaim_mode = 0
+vm.nr_hugepages = 0
+vm.nr_hugepages_mempolicy = 0
+" | sudo tee -a /etc/sysctl.conf
+
+# sudo cat /etc/rc.local
+echo "
+for i in /sys/kernel/mm/*transparent_hugepage/enabled; do echo never > $i; done
+for i in /sys/kernel/mm/*transparent_hugepage/defrag; do echo never > $i; done
+exit 0;
+blockdev --setra 0 /dev/xvda
+" | sudo tee -a /etc/rc.local
+
+
+NOTES
+
+
+
 
 
 tee "$scriptsFolder/90.opsmgr.do.other.sh" <<OTHER
@@ -1003,6 +1041,10 @@ for(var i = 0; i < 100000; i++) db.data.insert({text: Math.random().toString(36)
 use admin 
 db.createUser({user: 'mms-automation', pwd: '$mmsAutomationPassword', roles: ['clusterAdmin', 'dbAdminAnyDatabase', 'readWriteAnyDatabase', 'restore', 'userAdminAnyDatabase']})
 
+use admin 
+db.createUser({user: 'mms-automation', pwd: 'secret_auto', roles: ['clusterAdmin', 'dbAdminAnyDatabase', 'readWriteAnyDatabase', 'restore', 'userAdminAnyDatabase']})
+
+
 # Gotcha: 
 # use $dataFolder/db for database never do $dataFolder 
 # This operation requires that the parent directory of the data directory be writeable by the Automation Agent user, as during the conversion process the Automation Agent will create a temporary backup directory alongside the data directory. Depending on the size of the data, changing the storage engine may be a very long running operation.
@@ -1049,6 +1091,7 @@ db.createUser({user: 'mms-automation', pwd: '$mmsAutomationPassword', roles: ['c
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_omgr
 # i2cssh -Xi=~/.ssh/amazonaws_rsa -c aws_ors_mongo
 # openssl rand 24 > /<keyPath>/gen.key
+openssl rand -base64 32 | sed 's#[+=/]##g' | sudo tee /etc/security/mongodb-encryption-keyfile
 
 # filesystem stores & head databases
 

@@ -1,0 +1,29 @@
+---
+
+- name: check if journal folder already exists
+- stat: 
+    path: /data/journal
+  register: check_folder
+
+- name: make ext4 device for holding journal data
+  shell: 'mkfs.ext4 /dev/xvdd'
+  become: true
+  when: check_folder.stats.exists == False
+
+- name: create data folder 
+  file:
+    path: /data/journal
+    mode: 0755
+    state: directory
+  become: true
+  when: check_folder.stats.exists == False
+
+- name: mount xvdd device as journal folder
+  mount:
+    path: /data/journal
+    src: /dev/xvdd
+    fstype: ext4
+    opts: noatime
+    state: present
+  become: true
+  when: check_folder.stats.exists == False

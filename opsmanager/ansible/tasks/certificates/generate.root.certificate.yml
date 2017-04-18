@@ -1,0 +1,12 @@
+---
+- name: generate root certificates authority
+  hosts: local
+  tasks:
+    - name: create directory for output, scripts and certificates
+      file: path='{{ output_dir }}/scripts/certificates/' state=directory mode=0755
+      
+    - name: generate script file for root certificate authority using template file
+      template:
+        src: '{{ template_dir }}/certificates/generate.root.certificate.authority.txt'
+        dest: '{{ output_dir }}/scripts/certificates/generate.root.certificate.authority.sh'
+        mode: 0744

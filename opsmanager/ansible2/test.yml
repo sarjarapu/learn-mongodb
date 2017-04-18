@@ -1,0 +1,6 @@
+---
+- hosts: local 
+  tasks:
+     - name: run who am i running the shell as 
+       shell: whoami
+

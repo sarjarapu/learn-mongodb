@@ -1,0 +1,23 @@
+---
+- name: generate root certificates authority
+  hosts: local
+  vars: 
+    - ssh_key_path: ~/.ssh/mongodb_mms_rsa
+  tasks:
+
+    - name: execute the generate root certificate script 
+      shell: '{{ output_dir }}/scripts/certificates/generate.root.certificate.authority.sh'
+
+    - name: execute the generate member certificate script 
+      shell: '{{ item }}'
+      with_fileglob: 
+        - '{{ output_dir }}/scripts/certificates/generate.certificate.*.sh'
+
+    - name: upload the pem key files to remote servers 
+      vars: 
+        - ssh_key_path: ~/.ssh/mongodb_mms_rsa
+      shell: 'scp -i {{ssh_key_path}} {{ output_dir }}/certs/rootCA.pem {{ output_dir }}/certs/{{item}}.pem {{ output_dir }}/certs/mongodb_*.pem {{ansible_ssh_user}}@{{item}}:/home/{{ansible_ssh_user}}'
+      with_items:
+        - ska-av-demo-0.ska-personal.4870.mongodbdns.com
+        - ska-av-demo-1.ska-personal.4870.mongodbdns.com
+        - ska-av-demo-2.ska-personal.4870.mongodbdns.com
