@@ -26,16 +26,17 @@ mkdir -p $TSV_FOLDER
 mv $LOG_FOLDER/*.tsv $TSV_FOLDER/
 echo "Completed processing all files in '$LOG_FOLDER'"
 
+# consolidate all the tsv files into csv 
 firstFile=true
 consolidatedFile=$TSV_FOLDER/consolidated.txt
 for filePath in $TSV_FOLDER/*.tsv
 do
 filename=$(basename "$filePath")
-if [ "$firstFile" == "true" ]; then
-	grep -v '^$' $filePath | sed '1,/QUERIES/d' | sed -e "s/^/$filename    /" | tee $consolidatedFile  > /dev/null
+if [ $firstFile == true ]; then
+	grep -v '^$' $filePath | sed '1,/QUERIES/d' | gsed -e "s/^/$filename\t/" | tee $consolidatedFile  > /dev/null
     firstFile=false
 else
-	grep -v '^$' $filePath | sed '1,/namespace/d' | sed -e "s/^/$filename  /" | tee -a $consolidatedFile > /dev/null
+    grep -v '^$' $filePath | sed '1,/namespace/d' | gsed -e "s/^/$filename\t/" | tee -a $consolidatedFile > /dev/null
 fi
 done
 
