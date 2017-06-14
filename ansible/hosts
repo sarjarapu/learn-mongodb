@@ -1,5 +1,5 @@
 [local]
-localhost ansible_connection=local
+localhost ansible_connection=local ansible_python_interpreter=python
 
 [mongod_demo]
 ska-demo-mongod01 ansible_ssh_host=ec2-54-245-71-119.us-west-2.compute.amazonaws.com

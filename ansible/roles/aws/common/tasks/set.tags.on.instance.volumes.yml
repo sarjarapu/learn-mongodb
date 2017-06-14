@@ -1,0 +1,22 @@
+---
+- name: List volumes for an instance
+  ec2_vol:
+    region: "{{ aws_region }}"
+    instance: "{{ instance_item.id }}"
+    state: list
+  register: ec2volresult
+
+- name: display the output of list volumes of intance
+  debug: msg="Volumes of EC2 instance {{ instance_item.id }} - '{{ ec2volresult }}'"
+
+- name: set the tags for the instance volumes
+  ec2_tag:
+    region: "{{ aws_region }}" 
+    resource: "{{ vol_item.id }}"
+    tags:
+       "Name": "{{ rs_item }}-{{ vol_item.attachment_set.device }}"
+       "owner": "{{ aws_tag_owner }}"
+       "expire-on": "{{ aws_tag_expireon }}"
+  with_items: "{{ ec2volresult.volumes }}"
+  loop_control:
+    loop_var: vol_item

@@ -1,0 +1,363 @@
+## --availability-zone
+
+
+# know the availability zones 
+aws ec2 describe-availability-zones
+
+
+# Create AWS instance 
+# AMI for RedHat Enterprise version 7.3 HVM - ami-6f68cf0f
+aws ec2 run-instances --region us-west-2 --availability-zone us-west-2c  --image-id ami-6f68cf0f --count 1 --instance-type t2.small  --key-name ska-play --security-groups ska-sg-aws  --tag-specifications 'ResourceType=string,Tags=[{Key=Name,Value=ska-test-1},{Key=owner,Value=shyam.arjarapu},{Key=expire-on,Value=2017-06-16"]'
+# --hostname ska-test-1
+{
+    "OwnerId": "331472312345",
+    "ReservationId": "r-0e86d666a91bcf559",
+    "Groups": [],
+    "Instances": [
+        {
+            "Monitoring": {
+                "State": "disabled"
+            },
+            "PublicDnsName": "",
+            "RootDeviceType": "ebs",
+            "State": {
+                "Code": 0,
+                "Name": "pending"
+            },
+            "EbsOptimized": false,
+            "LaunchTime": "2017-06-13T00:04:37.000Z",
+            "PrivateIpAddress": "172.31.11.64",
+            "ProductCodes": [],
+            "VpcId": "vpc-0cdb1d68",
+            "StateTransitionReason": "",
+            "InstanceId": "i-073d7520461658d67",
+            "ImageId": "ami-6f68cf0f",
+            "PrivateDnsName": "ip-172-31-11-64.us-west-2.compute.internal",
+            "KeyName": "ska-play",
+            "SecurityGroups": [
+                {
+                    "GroupName": "ska-sg-aws",
+                    "GroupId": "sg-aafa79d3"
+                }
+            ],
+            "ClientToken": "",
+            "SubnetId": "subnet-38241a61",
+            "InstanceType": "t2.small",
+            "NetworkInterfaces": [
+                {
+                    "Status": "in-use",
+                    "MacAddress": "0a:7c:f0:d3:79:4a",
+                    "SourceDestCheck": true,
+                    "VpcId": "vpc-0cdb1d68",
+                    "Description": "",
+                    "NetworkInterfaceId": "eni-8c359b82",
+                    "PrivateIpAddresses": [
+                        {
+                            "PrivateDnsName": "ip-172-31-11-64.us-west-2.compute.internal",
+                            "Primary": true,
+                            "PrivateIpAddress": "172.31.11.64"
+                        }
+                    ],
+                    "PrivateDnsName": "ip-172-31-11-64.us-west-2.compute.internal",
+                    "Attachment": {
+                        "Status": "attaching",
+                        "DeviceIndex": 0,
+                        "DeleteOnTermination": true,
+                        "AttachmentId": "eni-attach-aa82dbd1",
+                        "AttachTime": "2017-06-13T00:04:37.000Z"
+                    },
+                    "Groups": [
+                        {
+                            "GroupName": "ska-sg-aws",
+                            "GroupId": "sg-aafa79d3"
+                        }
+                    ],
+                    "Ipv6Addresses": [],
+                    "SubnetId": "subnet-38241a61",
+                    "OwnerId": "331472312345",
+                    "PrivateIpAddress": "172.31.11.64"
+                }
+            ],
+            "SourceDestCheck": true,
+            "Placement": {
+                "Tenancy": "default",
+                "GroupName": "",
+                "AvailabilityZone": "us-west-2c"
+            },
+            "Hypervisor": "xen",
+            "BlockDeviceMappings": [],
+            "Architecture": "x86_64",
+            "StateReason": {
+                "Message": "pending",
+                "Code": "pending"
+            },
+            "RootDeviceName": "/dev/sda1",
+            "VirtualizationType": "hvm",
+            "AmiLaunchIndex": 0
+        }
+    ]
+}
+
+# TODO Grab the instance id from the above 
+# create the tags for the instance id 
+# aws ec2 create-tags --resources i-073d7520461658d67 --tags Key=Name,Value=ska-test Key=owner,Value=shyam.arjarapu Key=expire-on,Value=2017-06-16
+
+# get the instance id, public ip address, private ip address and the instance name 
+aws ec2 describe-instances --instance-ids i-073d7520461658d67 --query "Reservations[*].Instances[*].[InstanceId,PublicDnsName,PrivateDnsName,Tags[?Key=='Name'].Value[] | [0]]" --output text | tr "\t" "," | sort 
+
+# get the list of volumes that are attached 
+aws ec2 describe-instances --instance-ids i-073d7520461658d67 --query "Reservations[*].Instances[*].BlockDeviceMappings[*].[Ebs.VolumeId,DeviceName]" --output text | tr "\t" "," |sort
+# vol-01d03b4808ea64df0,/dev/sda1
+
+# create tags for the volume id 
+aws ec2 create-tags --resources vol-01d03b4808ea64df0 --tags Key=Name,Value=ska-test-1-root Key=owner,Value=shyam.arjarapu Key=expire-on,Value=2017-06-16
+
+# create a new volume and attach to the server 
+aws ec2 create-volume --size 30 --availability-zone us-west-2c --volume-type gp2 --tag-specifications 'ResourceType=volume,Tags=[{Key=Name,Value=ska-test-1-mongodb},{Key=owner,Value=shyam.arjarapu},{Key=expire-on,Value=2017-06-16}]'
+{
+    "AvailabilityZone": "us-west-2c",
+    "Tags": [
+        {
+            "Value": "ska-test-1-mongodb",
+            "Key": "Name"
+        },
+        {
+            "Value": "shyam.arjarapu",
+            "Key": "owner"
+        },
+        {
+            "Value": "2017-06-16",
+            "Key": "expire-on"
+        }
+    ],
+    "Encrypted": false,
+    "VolumeType": "gp2",
+    "VolumeId": "vol-065ef7f62bcf95669",
+    "State": "creating",
+    "Iops": 100,
+    "SnapshotId": "",
+    "CreateTime": "2017-06-13T00:41:01.527Z",
+    "Size": 30
+}
+
+
+# grab the volume id from the above step and attache it to the instance id 
+aws ec2 attach-volume --volume-id vol-065ef7f62bcf95669 --instance-id i-073d7520461658d67 --device xvdb
+{
+    "AttachTime": "2017-06-13T00:43:44.964Z",
+    "InstanceId": "i-073d7520461658d67",
+    "VolumeId": "vol-065ef7f62bcf95669",
+    "State": "attaching",
+    "Device": "xvdb"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#!/bin/sh
+
+# brew install jq
+
+awsRegionName='us-west-2'
+awsInstanceTagNamePrefix='ska-ad-mvu-tgt'
+reasonCode="AFTRv34"
+
+createAWSInstances() {
+	amiID=$1
+	instanceCount=$2
+	instanceNamePrefix=$3
+
+	# awsResult=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagNamePrefix*" --query "Reservations[*].Instances[*].[InstanceId,PublicDnsName,PrivateDnsName,Tags[?Key=='Name'].Value[] | [0]]" --output text | tr "\t" "," | sort ))
+	echo ${awsResult[@]};
+}
+
+getAwsInstances() {
+	awsRegionName=$1
+	awsInstanceTagNamePrefix=$2
+
+	awsResult=($(aws ec2 describe-instances --region "$awsRegionName" --filter "Name=tag:Name,Values=$awsInstanceTagNamePrefix*" --query "Reservations[*].Instances[*].[InstanceId,PublicDnsName,PrivateDnsName,Tags[?Key=='Name'].Value[] | [0]]" --output text | tr "\t" "," | sort ))
+	echo ${awsResult[@]};
+}
+
+getAwsVolumes() {
+	instanceId=$1
+	instanceName=$2
+	awsVolumes=($(aws ec2 describe-instances --instance-ids $instanceId --query "Reservations[*].Instances[*].BlockDeviceMappings[*].[Ebs.VolumeId,DeviceName]" --output text | tr "\t" "," |sort))
+	echo ${awsVolumes[@]};
+}
+
+createVolumeSnapshot() {
+	instanceId=$1
+	instanceName=$2
+	volumeId=$3
+	volumeName=$4
+	reasonCode=$5
+
+	message="{ instanceId: $instanceId, instanceName: $instanceName, device: $volumeName, reason: $reasonCode }"
+	snapshotName="$reasonCode-$instanceName-$volumeName"
+	snapshotId=($(aws ec2 create-snapshot --volume-id $volumeId --description "$message" --query SnapshotId --output text))
+	#  --query 'SnapshotId' --output text`
+	# https://github.com/CaseyLabs/aws-ec2-ebs-automatic-snapshot-bash/blob/master/ebs-snapshot.sh
+
+	# sleep 2 # wait for the snapshot id to bake in
+	# snapshotId=($(echo ${snapshotOutput[@]} | jq '.SnapshotId'))
+	snapshotName="$reasonCode-$instanceName-$volumeName"
+	aws ec2 create-tags --resources $snapshotId --tags Key=Name,Value="$snapshotName"
+	
+	echo ${snapshotOutput[@]};
+}
+
+
+
+
+getMatchingInstancesAndTakeSnapshots() {
+	awsRegionName=$1
+	awsInstanceTagNamePrefix=$2
+	reasonCode=$3
+	
+	queryResult=($(getAwsInstances $awsRegionName $awsInstanceTagNamePrefix))
+
+	# extract the instance, dns values from queryResult
+	instanceIds=($(printf '%s\n' "${queryResult[@]}" | cut -d',' -f1))
+	publicDNS=($(printf '%s\n' "${queryResult[@]}" | cut -d',' -f2))
+	privateDNS=($(printf '%s\n' "${queryResult[@]}" | cut -d',' -f3))
+	instanceNames=($(printf '%s\n' "${queryResult[@]}" | cut -d',' -f4))
+	# printf '%s\n' "${instanceIds[@]}"
+	# printf '%s\n' "${publicDNS[@]}"
+	# printf '%s\n' "${privateDNS[@]}"
+	# printf '%s\n' "${instanceNames[@]}"
+
+	# for each instanceId, get volumes
+	for instanceIndex in ${!instanceIds[@]}
+	do
+		instanceId=${instanceIds[$instanceIndex]}
+		instanceName=${instanceNames[$instanceIndex]}
+		volumeResult=($(getAwsVolumes $instanceId $instanceName))
+
+		volumeIds=($(printf '%s\n' "${volumeResult[@]}" | cut -d',' -f1))
+		volumeNames=($(printf '%s\n' "${volumeResult[@]}" | cut -d',' -f2))
+		# printf '%s\n' "${awsVolumeNames[@]}"
+		# printf '%s\n' "${awsVolumeIds[@]}"
+
+		# for each volume create snapshot with reasonCode
+		for volumeIndex in ${!volumeIds[@]}
+		do
+			volumeId=${volumeIds[$volumeIndex]}
+			volumeName=${volumeNames[$volumeIndex]}
+			snapshotOutput=($(createVolumeSnapshot $instanceId $instanceName $volumeId $volumeName $reasonCode))
+		done;
+	done;
+}
+
+getMatchingInstancesAndTakeSnapshots $awsRegionName "$awsInstanceTagNamePrefix-sh" $reasonCode
+getMatchingInstancesAndTakeSnapshots $awsRegionName "$awsInstanceTagNamePrefix-mongos" $reasonCode
+getMatchingInstancesAndTakeSnapshots $awsRegionName "$awsInstanceTagNamePrefix-cfg" $reasonCode
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ami-23e8a343
+
+aws ec2 create-tags --resources i-1234567890abcdef0 --tags Key=\"[Group]\",Value=test
+aws ec2 run-instances --image-id ami-05355a6c --block-device-mappings '[{"DeviceName":"/dev/sdb","Ebs":{"VolumeSize":20,"DeleteOnTermination":false,"VolumeType":"standard"}}]'
+aws ec2 run-instances --image-id ami-1a2b3c4d --count 1 --instance-type t1.micro --key-name MyKeyPair --security-groups MySecurityGroup
+
+aws ec2 run-instances \
+    --image-id ami-5ec1673e \
+    --instance-type "t2.large" \
+    --region="us-west-2" \
+    --key-name "ska-play" \
+    --security-groups "ska-sg-aws" \
+    --associate-public-ip-address \
+    --count 1
+
+
+[--dry-run | --no-dry-run]
+          --image-id <value>
+          [--key-name <value>]
+          [--security-groups <value>]
+          [--security-group-ids <value>]
+          [--user-data <value>]
+          [--instance-type <value>]
+          [--placement <value>]
+          [--kernel-id <value>]
+          [--ramdisk-id <value>]
+          [--block-device-mappings <value>]
+          [--monitoring <value>]
+          [--subnet-id <value>]
+          [--disable-api-termination | --enable-api-termination]
+          [--instance-initiated-shutdown-behavior <value>]
+          [--private-ip-address <value>]
+          [--client-token <value>]
+          [--additional-info <value>]
+          [--network-interfaces <value>]
+          [--iam-instance-profile <value>]
+          [--ebs-optimized | --no-ebs-optimized]
+          [--count <value>]
+          [--secondary-private-ip-addresses <value>]
+          [--secondary-private-ip-address-count <value>]
+          [--associate-public-ip-address | --no-associate-public-ip-address]
+          [--cli-input-json <value>]
+          [--generate-cli-skeleton]
+
+
+--image-id
+--key-name
+--security-group-ids
+--instance-type t2.small
+--count
+--generate-cli-skeleton
+
+
+aws ec2 run-instances --image-id ami-1a2b3c4d --count 1 --instance-type t1.micro --key-name MyKeyPair --security-groups MySecurityGroup
+aws ec2 run-instances --image-id ami-abc12345 --count 1 --instance-type t2.micro --key-name MyKeyPair --security-group-ids sg-903004f8 --subnet-id subnet-6e7f829e
+aws ec2 run-instances --image-id ami-abc12345 --count 1 --instance-type t2.micro --key-name MyKeyPair --security-group-ids sg-903004f8 --subnet-id subnet-6e7f829e
+
+
+aws ec2 describe-images --owners self amazon
+aws ec2 describe-images --filters architecture=x86_64,virtualization-type=hvm
+
+aws ec2 describe-images --owners amazon --filters Name=architecture,Values=x86_64,Name=virtualization-type,Values=hvm,Name=virtualization-type,Values=hvm
+aws ec2 describe-images --owners aws-marketplace --filters Name=architecture,Values=x86_64,Name=virtualization-type,Values=hvm,Name=virtualization-type,Values=hvm
+
+aws ec2 describe-images --owners aws-marketplace --filters "Name=name,Values=CentOS 7 (x86_64) - with Updates HVM"
+AMI ID
+CentOS Linux 6 x86_64 HVM EBS 1602-74e73035-3435-48d6-88e0-89cc02ad83ee-ami-21e6d54b.3 (ami-05cf2265)
