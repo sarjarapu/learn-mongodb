@@ -1,0 +1,15 @@
+---
+# file: roles/system/tasks/install.xfs.mount.device.yml
+- name: format xvdb volume
+  filesystem:
+    fstype: xfs
+    dev: /dev/xvdb
+    opts: -cc
+
+- name: mount the device as data
+  mount:
+    path: /data
+    src: /dev/xvdb
+    fstype: xfs
+    opts: noatime
+    state: present

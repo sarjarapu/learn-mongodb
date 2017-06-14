@@ -1,0 +1,9 @@
+---
+- name: install xfsprogs and xfsdump
+  yum: 
+    name: {{item}}
+    state: present
+  with_items:
+    - xfsprogs
+    - xfsdump
+  become: true
