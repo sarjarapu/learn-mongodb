@@ -16,7 +16,3 @@
   with_items: "{{ create_output.instances }}"
   loop_control:
     loop_var: instance_item
-
-- name: yum upgrade on server
-  include: "../../../../../roles/system/tasks/yum.upgrade.yml"
-  with_items: "groups.{{ server_group_name }}"

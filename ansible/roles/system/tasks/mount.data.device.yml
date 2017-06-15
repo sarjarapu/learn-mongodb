@@ -1,11 +1,24 @@
 ---
 # file: roles/system/tasks/mount.data.device.yml
+- name: check if data folder already exists
+  stat: 
+    path: /data
+  register: check_folder
+
 - name: format xvdb volume
   filesystem:
     fstype: xfs
     dev: /dev/xvdb
-    opts: -cc
+    # force: True
   become: true
+  when: check_folder.stat.exists == False
+
+- name: create data folder at root
+  file:
+    path: /data
+    state: directory
+  become: true
+  when: check_folder.stat.exists == False
 
 - name: mount the device as data
   mount:
@@ -13,5 +26,5 @@
     src: /dev/xvdb
     fstype: xfs
     opts: noatime
-    state: present
+    state: mounted
   become: true

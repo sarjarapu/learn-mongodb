@@ -1,0 +1,12 @@
+---
+# file: playbooks/ska.awsl/create.replicaset.yml
+- name: create a replicaset in aws
+  hosts: local
+  gather_facts: false
+  roles: 
+    - "roles/deployment/mongo/replicaset"
+
+- name: yum packages on shard hosts
+  hosts: "{{server_group_name}}"
+  roles: 
+    - "roles/system"
