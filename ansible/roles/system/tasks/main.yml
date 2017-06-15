@@ -1,15 +1,15 @@
-- name: run hostname
-  shell: "echo $HOSTNAME"
-  register: hn1
-
-- name: print hostname
-  debug: var=hn1
-
+---
 - name: yum upgrade on server
-  include: "../../roles/system/tasks/yum.upgrade.yml"
+  include: "./yum.upgrade.yml"
 
 - name: yum install XFS 
-  include: "../../roles/system/tasks/yum.install.xfstools.yml"
+  include: "./yum.install.xfstools.yml"
 
 - name: ensure xvdb device is XFS and mounted
-  include: "../../roles/system/tasks/mount.data.device.yml"
+  include: "./mount.data.device.yml"
+
+- name: disable selinux and restart
+  include: "./disable.selinux.yml"
+
+- name: reboot the server
+  include: "./reboot.yml"

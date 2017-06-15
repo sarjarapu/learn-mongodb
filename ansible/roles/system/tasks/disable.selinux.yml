@@ -1,0 +1,15 @@
+---
+# - name: disable the selinux 
+#   ini_file:
+#     path: /etc/sysconfig/selinux
+#     section: null
+#     option: SELINUX
+#     value: disabled
+#     no_extra_spaces: true
+#   become: true
+
+- name: disable the selinux 
+  selinux:
+    state: disabled
+    policy: targeted
+  become: true

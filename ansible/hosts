@@ -2,4 +2,4 @@
 localhost ansible_connection=local ansible_python_interpreter=python
 
 [ska_shard1]
-ec2-34-211-111-229.us-west-2.compute.amazonaws.com
+ec2-54-244-37-161.us-west-2.compute.amazonaws.com

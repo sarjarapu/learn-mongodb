@@ -1,6 +1,12 @@
 ---
 # file: playbooks/ska.awsl/create.replicaset.yml
-- name: create a replicaset in aws
-  include: "./setup.servers.yml"
-  vars:
-    server_group_name: "ska_shard1"
+# - name: create a replicaset in aws
+#   include: "./setup.servers.yml"
+#   vars:
+#     server_group_name: "ska_shard1"
+
+
+- name: reboot the server
+  hosts: ska_shard1
+  tasks:
+    - include: "../../roles/system/tasks/reboot.yml"

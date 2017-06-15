@@ -7,6 +7,8 @@
 
 - name: wait for SSH to be available on machine
   include: "../../../../../roles/system/tasks/wait.for.ssh.yml"
+  vars:
+    public_dns_name: "{{ssh_instance_item.public_dns_name}}"
   with_items: "{{ create_output.instances }}"
   loop_control:
     loop_var: ssh_instance_item

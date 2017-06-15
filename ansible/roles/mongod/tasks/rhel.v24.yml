@@ -43,3 +43,16 @@
     - "mongo-10gen"
     - "mongo-10gen-server"
   #  when: (mongo_version is undefined) or (mongo_version != '2.4.14')
+
+- name: use mongod.conf template file and replace contents on server
+  template:
+    src: "../files/v24.mongod.conf"
+    dest: /etc/mongod.conf
+    owner: mongod
+    group: mongod
+  become: true
+
+- name: start the mongod server
+  service:
+    name: mongod
+    state: started
