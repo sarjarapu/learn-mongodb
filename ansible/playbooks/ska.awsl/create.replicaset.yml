@@ -4,6 +4,6 @@
   hosts: local
   gather_facts: false
   vars:
-    server_group_name: "ska-shard1"
+    server_group_name: "ska_shard1"
   roles: 
     - "roles/deployment/mongo/replicaset"

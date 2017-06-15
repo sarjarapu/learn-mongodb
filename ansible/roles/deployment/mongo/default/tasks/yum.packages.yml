@@ -1,0 +1,18 @@
+---
+- name: yum upgrade on server
+  include: "../../../../../roles/system/tasks/yum.upgrade.yml"
+  with_items: "{{ create_output.instances }}"
+  loop_control:
+    loop_var: instance_item
+
+# - name: yum install XFS 
+#   include: "../../../../../roles/system/tasks/yum.install.xfstools.yml"
+#   with_items: "{{ create_output.instances }}"
+#   loop_control:
+#     loop_var: instance_item
+
+# - name: ensure xvdb device is XFS and mounted
+#   include: "../../../../../roles/system/tasks/mount.data.device.yml"
+#   with_items: "{{ create_output.instances }}"
+#   loop_control:
+#     loop_var: instance_item

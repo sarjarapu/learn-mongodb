@@ -54,9 +54,31 @@
      create_output: "{{ ec2_facts_output }}"
   when: ec2_facts_output.instances.0 is defined
 
-# - name: Add the newly created EC2 instance(s) to the local host group (located inside the directory)
-#   local_action: lineinfile 
-#                 dest="../../hosts" 
-#                 regexp={{ item.public_ip }} 
-#                 insertafter="[{{ server_group_name }}]" line={{ item.public_ip }}
-#   with_items: {{ create_output.instances }} 
+- name: add these ec2 instances to hosts file
+  add_host:
+     hostname: "{{ dns_item.tags.Name }}"
+     groups: "[{{ server_group_name }}]"
+     ansible_ssh_host: "{{ dns_item.public_dns_name }}"
+  with_items: "{{ create_output.instances }}"
+  loop_control:
+    loop_var: dns_item
+     
+- name: add the host group name to hosts file
+  lineinfile:
+    dest: "../../hosts"
+    regexp: "^\\[{{ server_group_name|replace('-', '\\-')}}\\]"
+    line: "[{{ server_group_name }}]"
+    state: present
+    create: True
+
+- name: add these ec2 instances to hosts file
+  lineinfile:
+    dest: "../../hosts"
+    regexp: "{{ dns_item.public_dns_name|replace('-', '\\-')}}"
+    insertafter: "{{ server_group_name }}"
+    line: "{{ dns_item.public_dns_name }}"
+    state: present
+    create: True
+  with_items: "{{ create_output.instances }}"
+  loop_control:
+    loop_var: dns_item

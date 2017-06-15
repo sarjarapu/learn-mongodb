@@ -1,9 +1,11 @@
 ---
 - name: install xfsprogs and xfsdump
   yum: 
-    name: {{item}}
+    name: "{{pkg_item}}"
     state: present
   with_items:
     - xfsprogs
     - xfsdump
+  loop_control:
+    loop_var: pkg_item
   become: true

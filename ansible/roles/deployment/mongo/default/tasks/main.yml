@@ -11,8 +11,12 @@
   loop_control:
     loop_var: ssh_instance_item
 
-# - name: Set the tags on attached volumes for each instance
-#   include: "../../roles/aws/tasks/set.tags.on.instance.volumes.yml"
-#   with_items: "{{ create_output.instances }}"
-#   loop_control:
-#     loop_var: instance_item
+- name: set the tags on attached volumes for each instance
+  include: "../../../../../roles/aws/tasks/set.tags.on.instance.volumes.yml"
+  with_items: "{{ create_output.instances }}"
+  loop_control:
+    loop_var: instance_item
+
+- name: yum upgrade on server
+  include: "../../../../../roles/system/tasks/yum.upgrade.yml"
+  with_items: "groups.{{ server_group_name }}"

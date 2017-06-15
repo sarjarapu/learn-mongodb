@@ -1,12 +1,12 @@
 ---
-# file: roles/aws/mongo.replicaset/tasks/main.yml
+# file: roles/aws/mongo/replicaset/tasks/main.yml
 - name: create 3 server replicaset on AWS
   include: '../../default/tasks/main.yml'
   vars:
     instance_name: "{{ rs_item }}"
   with_items:
-    - "{{ server_group_name }}-svr1"
-    # - "{{ server_group_name }}-svr2"
-    # - "{{ server_group_name }}-svr3"
+    - "{{ server_group_name }}_svr1"
+    # - "{{ server_group_name }}_svr2"
+    # - "{{ server_group_name }}_svr3"
   loop_control:
     loop_var: rs_item
