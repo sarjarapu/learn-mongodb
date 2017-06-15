@@ -1,0 +1,4 @@
+---
+- name: install mongod for the given input version 
+  include: "./rhel.v24.yml"
+  #when: ((os_flavor == "rhel") and (mongo_version == "v24"))

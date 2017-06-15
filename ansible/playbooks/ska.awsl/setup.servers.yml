@@ -1,12 +1,21 @@
 ---
 # file: playbooks/ska.awsl/create.replicaset.yml
-- name: create a replicaset in aws
-  hosts: local
-  gather_facts: false
-  roles: 
-    - "roles/deployment/mongo/replicaset"
+# - name: create a replicaset in aws
+#   hosts: local
+#   gather_facts: false
+#   roles: 
+#     - "roles/deployment/mongo/replicaset"
 
-- name: yum packages on shard hosts
+# - name: yum packages on shard hosts
+#   hosts: "{{server_group_name}}"
+#   roles: 
+#     - "roles/system"
+
+- name: install mongo db v24
   hosts: "{{server_group_name}}"
+  vars:
+    os_flavor: "rhel"
+    mongo_major_version: "v24"
+    mongo_full_version: "2.4.6"
   roles: 
-    - "roles/system"
+    - "roles/mongod"
