@@ -1,5 +1,5 @@
 [local]
 localhost ansible_connection=local ansible_python_interpreter=python
 
-[ska_shard1]
-ec2-54-244-37-161.us-west-2.compute.amazonaws.com
+[test]
+ec2-34-212-38-171.us-west-2.compute.amazonaws.com private_dns_name=ip-172-31-5-58.us-west-2.compute.internal

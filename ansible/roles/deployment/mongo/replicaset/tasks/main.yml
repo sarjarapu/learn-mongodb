@@ -6,7 +6,7 @@
     instance_name: "{{ rs_item }}"
   with_items:
     - "{{ server_group_name }}_svr1"
-    # - "{{ server_group_name }}_svr2"
-    # - "{{ server_group_name }}_svr3"
+    - "{{ server_group_name }}_svr2"
+    - "{{ server_group_name }}_svr3"
   loop_control:
     loop_var: rs_item

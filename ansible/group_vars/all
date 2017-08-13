@@ -11,9 +11,10 @@ aws_ami_rhel73: "ami-6f68cf0f"
 
 # configure what instance you need 
 aws_ami: "{{ aws_ami_rhel73 }}"
-aws_instance_type: "t2.micro"
+aws_instance_type: "t2.large"
 aws_tag_name: "ska-test"
 aws_tag_expireon: "2017-06-16"
+aws_data_vol_size: 30
 
 # aws configuration that don't change often 
 aws_remote_user: "ec2-user"
