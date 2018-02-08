@@ -1,0 +1,13 @@
+---
+mongo_version: "3.4.7"
+replset_name: "rs0"
+app_mount_path: "/app"
+data_folder: "{{app_mount_path}}/{{replset_name}}"
+log_path: "{{data_folder}}/log"
+mongo_port: "28000"
+root_username: "superuser"
+root_password: "password"
+swap_device: "/dev/xvdf"
+mongod_config_path: "/etc/mongod.conf"
+bind_ip: "0.0.0.0"
+mongod_service: "mongod"

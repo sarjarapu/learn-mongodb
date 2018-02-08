@@ -1,0 +1,90 @@
+---
+# NOTES: should you need to rerun
+# sudo rm -rf /app/* && sudo umount /dev/xvdb && sudo rm -rf /app
+# sudo rm -rf /app/mongodb/db/* /etc/mongod.conf
+
+- name: disable selinux
+  become: true
+  selinux:
+    state: disabled
+    policy: targeted
+
+- name: check if {{ app_mount_path }} folder already exists
+  stat: 
+    path: "{{ app_mount_path }}"
+  register: check_folder
+
+- block:
+  - name: format /dev/xvdb volume as XFS
+    become: true
+    filesystem:
+      fstype: xfs
+      dev: /dev/xvdb
+      force: True
+      # CAUTION: never use force: True, unless you are playing around
+
+  - name: create {{ app_mount_path }} folder at root
+    become: true
+    file:
+      state: directory
+      path: "{{ app_mount_path }}"
+      mode: 0755
+
+  - name: mount the device /dev/xvdb as data
+    become: true
+    mount:
+      path: "{{ app_mount_path }}"
+      src: /dev/xvdb
+      fstype: xfs
+      opts: noatime
+      state: mounted
+
+  - name: set {{ app_mount_path }} permissions to ec2user
+    become: true
+    file:
+      path: "{{ app_mount_path }}"
+      state: directory
+      owner: ec2-user
+      group: ec2-user
+      mode: 0755
+  when: check_folder.stat.exists == False
+
+
+- name: check if {{ data_folder }}/db folder already exists
+  stat: 
+    path: "{{ data_folder }}/db"
+  register: check_folder_db
+
+- name: create the {{ log_path }}, {{ data_folder }}/db and {{ data_folder }}/private folders
+  become: true
+  file: 
+    path: "{{ item }}"
+    state: directory
+    owner: mongod
+    group: mongod
+    mode: 0755
+  with_items:
+    - "{{ log_path }}"
+    - "{{ data_folder }}"
+    - "{{ data_folder }}/db"
+    - "{{ data_folder }}/private"
+  when: check_folder_db.stat.exists == False
+
+- name: copy the mongodb auth keyfile
+  become: true
+  template:
+    src: "mongodb-auth-keyfile"
+    dest: "{{ data_folder }}/private/mongodb-auth-keyfile"
+    mode: 0400
+    owner: mongod
+    group: mongod
+  when: check_folder_db.stat.exists == False
+
+- name: copy the {{mongod_config_path}}
+  become: true
+  template:
+    src: "mongod_v{{ mongo_version[0:3] }}.hbs"
+    dest: "{{mongod_config_path}}"
+    mode: 0644
+  when: check_folder_db.stat.exists == False
+  

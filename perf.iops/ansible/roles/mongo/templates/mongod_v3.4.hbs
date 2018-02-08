@@ -1,0 +1,23 @@
+systemLog:
+  destination: file
+  logAppend: true
+  logRotate: reopen
+  path: {{ log_path }}/mongod.log
+storage:
+  dbPath: {{ data_folder }}/db
+  directoryPerDB: true
+##  wiredTiger:
+##    engineConfig:
+##      cacheSizeGB: 7
+processManagement:
+  fork: true
+  pidFilePath: /var/run/mongodb/mongod.pid
+replication:
+   replSetName: {{ replset_name }}
+   oplogSizeMB: 400
+net:
+  port: {{ mongo_port }}
+  bindIp: {{ bind_ip }}
+#security:
+#   authorization: enabled
+#   keyFile: {{ data_folder }}/private/mongodb-auth-keyfile

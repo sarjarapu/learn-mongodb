@@ -1,6 +1,0 @@
----
-## file: playbooks/ska.awsl/create.instances.yml
-- name: create a replicaset in aws
-  gather_facts: false
-  roles: 
-    - "roles/deployment/mongo/replicaset"

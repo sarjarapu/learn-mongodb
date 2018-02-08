@@ -1,0 +1,9 @@
+- name: print the primary hostname, ip address and members
+  debug: msg="private_dns [{{private_dns}}] private_ip [{{private_ip}}] member_ip [{{members}}]"
+
+- name: initiate replica set and wait 30 sec
+  shell: "mongo admin --host {{private_ip}} --port {{mongo_port}} --eval 'rs.initiate({_id: \"replset_name\", members: [{_id:0, host: \"{{private_dns}}:{{mongo_port}}\"}]});sleep(30000);'"
+
+- name: add other members to replica set 
+  shell: "mongo admin --host {{private_ip}} --port {{mongo_port}} --eval 'rs.add(\"{{item}}:{{mongo_port}}\");'"
+  with_items: "{{members}}"

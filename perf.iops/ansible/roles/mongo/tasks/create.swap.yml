@@ -1,0 +1,27 @@
+---
+
+- name: check whether swap is already enabled or not
+  command: cat /proc/sys/vm/swappiness
+  register: actual_swappiness
+
+- name: print the existing swappiness
+  debug: msg="actual_swappiness [{{ actual_swappiness.stdout }}]"
+
+- block:
+  - name: turn off the swap if already exists
+    command: swapoff -a
+
+  - name: setup swap
+    command: mkswap -f  "{{swap_device}}"
+
+  - name: create swap
+    command: swapon  "{{swap_device}}"
+
+  - name: add {{swap_device}} entry in /etc/fstab; ansible module mount doesnt work!
+    lineinfile:
+      path: /etc/fstab
+      line: "{{swap_device}} none swap sw 0 0"
+      state: present
+
+  when: actual_swappiness.stdout != "60"
+  become: true

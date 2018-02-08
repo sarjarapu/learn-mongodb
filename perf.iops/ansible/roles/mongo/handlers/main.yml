@@ -1,0 +1,22 @@
+---
+# handlers file for mongo
+
+- name: start mongod
+  become: true
+  service:
+    name: "{{mongod_service}}"
+    state: started
+    enabled: yes
+
+- name: stop mongod
+  become: true
+  service:
+    name: "{{mongod_service}}"
+    state: stopped
+
+- name: restart mongod
+  become: true
+  service:
+    name: "{{mongod_service}}"
+    state: restarted
+

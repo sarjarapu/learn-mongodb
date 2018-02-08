@@ -1,5 +1,0 @@
-mkdir -p {{ output_dir }}/certs
-cd {{ output_dir }}/certs
-openssl genrsa -out {{ output_dir }}/certs/rootCA.key 2048
-openssl req -x509 -new -nodes -key {{ output_dir }}/certs/rootCA.key -days 365 -out {{ output_dir }}/certs/rootCA.crt -subj "/C=US/ST=Texas/L=Austin/O=MongoDB/OU=Certification Authority/CN=avy-prd-corp-mongo1.c.avy-prd-env.internal"
-cp {{ output_dir }}/certs/rootCA.crt {{ output_dir }}/certs/rootCA.pem 

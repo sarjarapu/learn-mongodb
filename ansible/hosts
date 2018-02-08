@@ -1,5 +1,0 @@
-[local]
-localhost ansible_connection=local ansible_python_interpreter=python
-
-[test]
-ec2-34-212-38-171.us-west-2.compute.amazonaws.com private_dns_name=ip-172-31-5-58.us-west-2.compute.internal

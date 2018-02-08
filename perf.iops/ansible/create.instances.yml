@@ -1,0 +1,16 @@
+---
+- name: create 3 aws instance for replicaset 
+  hosts: local
+  tasks:
+    - include_role:
+        name: aws
+      vars:
+        instance_type: "t2.large"
+        tag_name: "ska_poc"
+        group_name: "iop"
+        server_number: "{{ role_item }}"
+        data_vol_size: 30
+      with_items: 
+        - [1, 2, 3]
+      loop_control:
+        loop_var: "role_item"

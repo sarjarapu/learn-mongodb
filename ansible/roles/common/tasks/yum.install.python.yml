@@ -1,6 +1,0 @@
----
-- name: install python 2.7 minimal 
-  yum: 
-    name: python-minimal
-    state: present
-  become: true

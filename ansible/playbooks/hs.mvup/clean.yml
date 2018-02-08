@@ -1,5 +1,0 @@
----
-- name: create sharded cluster on mongodb v2.4 
-  hosts: mongo
-  roles: 
-    - roles/mongod/uninstall/ubuntu/ce.v24/

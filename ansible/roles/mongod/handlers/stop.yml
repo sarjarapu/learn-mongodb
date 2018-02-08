@@ -1,5 +1,0 @@
----
-- name: stop mongod
-  service:
-    name: mongod
-    state: stopped

@@ -1,0 +1,7 @@
+[local]
+localhost ansible_connection=local ansible_python_interpreter=python
+
+[ska_poc_iop]
+ec2-52-11-18-70.us-west-2.compute.amazonaws.com
+ec2-52-42-159-83.us-west-2.compute.amazonaws.com
+ec2-54-202-191-226.us-west-2.compute.amazonaws.com

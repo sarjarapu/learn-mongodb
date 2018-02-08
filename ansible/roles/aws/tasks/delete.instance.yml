@@ -1,7 +1,0 @@
----
-- name: delete the aws instance id
-  ec2:
-    instance_ids: '{{ ec2.instance_ids }}'
-    wait: yes
-    state: 'absent'
-    

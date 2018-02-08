@@ -1,0 +1,3 @@
+
+- name: create root user
+  shell: "mongo admin --host {{private_ip}} --port {{mongo_port}} --eval 'db.createUser({user: \"{{root_username}}\", pwd: \"{{root_password}}\", roles: [ \"root\" ] })'"

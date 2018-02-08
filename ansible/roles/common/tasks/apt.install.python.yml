@@ -1,6 +1,0 @@
----
-- name: install python 2.7 minimal 
-  apt: 
-    name: python-minimal
-    state: present
-  become: true

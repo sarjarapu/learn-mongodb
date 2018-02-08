@@ -1,0 +1,9 @@
+
+- name: uncomment security.authentication and keyfile in {{mongod_config_path}}
+  become: true
+  replace:
+    path: "{{mongod_config_path}}"
+    regexp: '^#'
+    replace: ''
+  notify:
+    - restart mongod
