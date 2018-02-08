@@ -8,7 +8,7 @@
   register: instance_check
 
 - name: print instance_check.instances.0 on create instance
-  debug: msg="instance name [{{ instance_name }}] ; exists = [{{ instance_check.instances.0 is defined }}]"
+  debug: msg="instance name [{{ instance_name }}] ; exists = [{{ instance_check.instances.0 is defined }}] ; instance = [{{instance_check.instances.0}}]"
 
 - block:
   - name: if not exists already, create a new instance name = [{{ instance_name }}]
@@ -75,3 +75,22 @@
         "expire-on": "{{ tag_expireon }}"
     with_items: "{{ volumes_output.volumes }}"
   when: instance_check.instances.0 is undefined
+
+
+- block:
+  - name: add the [{{ server_group_name }}] to hosts file
+    lineinfile:
+      dest: "hosts"
+      line: "[{{ server_group_name }}]"
+      state: present
+      create: True
+
+  - name: add the {{ instance_check.instances.0.public_dns_name }} to [{{ server_group_name }}] group in hosts file
+    lineinfile:
+      dest: "hosts"
+      regexp: "^{{ instance_check.instances.0.public_dns_name }}"
+      insertafter: "{{ server_group_name }}"
+      line: "{{ instance_check.instances.0.public_dns_name }} private_dns={{ instance_check.instances.0.private_dns_name }} private_ip={{ instance_check.instances.0.private_ip_address }}"
+      state: present
+      create: True
+  when: instance_check.instances.0 is defined

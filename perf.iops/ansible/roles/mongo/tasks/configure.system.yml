@@ -55,6 +55,21 @@
     state: disabled
     policy: targeted
 
+
+- name: create script file for disable the transparent huge pages
+  become: true
+  template:
+    src: "disable-transparent-hugepages"
+    dest: "/etc/init.d/disable-transparent-hugepages"
+    mode: 0755
+
+- name: disable the transparent huge pages
+  become: true
+  service:
+    name: "disable-transparent-hugepages"
+    state: started
+    enabled: true
+
 - name: reboot
   become: true
   shell: (sleep 1 && /usr/sbin/reboot &)
@@ -67,7 +82,7 @@
     host: "{{ inventory_hostname }}"
     port: 22
     delay: 10
-    timeout: 300
+    timeout: 600
     state: started
   connection: local
 

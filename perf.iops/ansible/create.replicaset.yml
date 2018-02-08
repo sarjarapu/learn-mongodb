@@ -3,7 +3,7 @@
   hosts: "ska_poc_iop"
   roles:
     - role: mongo
-      mongo_version: "3.6.2"
+      mongo_version: "3.4.12"
       tag_name: "ska_poc"
       group_name: "iop"
       replset_name: "rs0"
