@@ -1,5 +1,5 @@
 ---
-    
+
 - name: set vm.swappiness to 60
   become: true
   sysctl:
@@ -55,6 +55,12 @@
     state: disabled
     policy: targeted
 
+- name: configure the ulimits for the mongod
+  become: true
+  template:
+    src: "99-mongodb-nproc.conf"
+    dest: "/etc/security/limits.d/99-mongodb-nproc.conf"
+    mode: 0644
 
 - name: create script file for disable the transparent huge pages
   become: true
@@ -67,6 +73,28 @@
   become: true
   service:
     name: "disable-transparent-hugepages"
+    state: started
+    enabled: true
+
+- name: configure the readahead settings
+  become: true
+  lineinfile:
+    dest: "/etc/rc.local"
+    line: "blockdev --setra 0 /dev/xvdb"
+    state: present
+    create: True
+
+- name: set the execute permissions on the file 
+  become: true
+  file:
+    state: file
+    path: "/etc/rc.d/rc.local"
+    mode: 0755
+
+- name: enable rc-local service
+  become: true
+  service:
+    name: "rc-local"
     state: started
     enabled: true
 
