@@ -1,30 +1,30 @@
 ---
-- name: print the hostname, ip address
-  debug: msg="private_dns [{{private_dns}}] private_ip [{{private_ip}}]"
+# - name: print the hostname, ip address
+#   debug: msg="private_dns [{{private_dns}}] private_ip [{{private_ip}}]"
 
-- name: print the replSet, data, log and config paths
-  debug: msg="replset_name [{{ replset_name }}]; data_folder [{{data_folder}}]; log_path [{{log_path}}]; mongo_port [{{mongo_port}}]; mongod_config_path [{{mongod_config_path}}]; bind_ip [{{bind_ip}}]"
+# - name: print the replSet, data, log and config paths
+#   debug: msg="replset_name [{{ replset_name }}]; data_folder [{{data_folder}}]; log_path [{{log_path}}]; mongo_port [{{mongo_port}}]; mongod_config_path [{{mongod_config_path}}]; bind_ip [{{bind_ip}}]"
 
-- name: install xfsprogs and xfsdump
-  yum: 
-    name: "{{item}}"
-    state: present
-  with_items:
-    - xfsprogs
-    - xfsdump
-    - curl
-  become: true
+# - name: install xfsprogs and xfsdump
+#   yum: 
+#     name: "{{item}}"
+#     state: present
+#   with_items:
+#     - xfsprogs
+#     - xfsdump
+#     - curl
+#   become: true
 
-- include: create.swap.yml
-- include: install.mongo.yml
-- include: mountdata.copyfiles.yml
+# - include: create.swap.yml
+# - include: install.mongo.yml
+# - include: mountdata.copyfiles.yml
 - include: configure.system.yml # system reboot at the end 
 
-- name: start mongod service
-  become: true
-  service:
-    name: mongod
-    state: started
-    enabled: yes
+# - name: start mongod service
+#   become: true
+#   service:
+#     name: mongod
+#     state: started
+#     enabled: yes
     
 # - include: enable.security.yml

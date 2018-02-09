@@ -8,7 +8,7 @@
   register: instance_check
 
 - name: print instance_check.instances.0 on create instance
-  debug: msg="instance name [{{ instance_name }}] ; exists = [{{ instance_check.instances.0 is defined }}] ; instance = [{{instance_check.instances.0}}]"
+  debug: msg="instance name [{{ instance_name }}] ; exists = [{{ instance_check.instances.0 is defined }}] ;"
 
 - block:
   - name: if not exists already, create a new instance name = [{{ instance_name }}]
